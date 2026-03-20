@@ -88,6 +88,8 @@ export class Game {
       this.sm, this.bet, this.input,
       this.balls, this.cueBall, this.table,
       this.hud, this.banner,
+      fn => this.app.ticker.add(fn),
+      fn => this.app.ticker.remove(fn),
     );
 
     // Ball selection

@@ -16,21 +16,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }
 
+type TickerFn = (dt: { deltaMS: number }) => void;
+
 export class RoundController {
   private anim: AnimationController;
   private rng   = ProbabilityController.fresh();
 
   constructor(
-    private sm:     StateMachine,
-    private bet:    BetController,
-    private input:  InputController,
-    private balls:  BallSprite[],
-    private cueBall: CueBall,
-    private table:  PoolTable,
-    private hud:    Hud,
-    private banner: ResultBanner,
+    private sm:          StateMachine,
+    private bet:         BetController,
+    private input:       InputController,
+    private balls:       BallSprite[],
+    private cueBall:     CueBall,
+    private table:       PoolTable,
+    private hud:         Hud,
+    private banner:      ResultBanner,
+    tickerAdd:           (fn: TickerFn) => void,
+    tickerRemove:        (fn: TickerFn) => void,
   ) {
-    this.anim = new AnimationController(balls, cueBall, table);
+    this.anim = new AnimationController(balls, cueBall, table, tickerAdd, tickerRemove);
   }
 
   /** Called when player hits BREAK. */

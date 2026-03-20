@@ -1,248 +1,295 @@
-import { gsap } from 'gsap';
-import { BallSprite } from '../objects/BallSprite';
-import { CueBall }    from '../objects/CueBall';
-import { PoolTable }  from '../objects/PoolTable';
-import { RoundOutcome } from '../state/GameState';
-import {
-  RACK_POSITIONS, CUE_BALL_PRESETS, POCKETS,
-  FELT, BALL_RADIUS,
-} from '../config/gameConfig';
-import { SCATTER_PRESETS as SCATTER_PRESETS_DATA } from '../config/scatterPresets';
+/**
+ * AnimationController
+ *
+ * Motion model: per-frame physics integration running on the PixiJS ticker.
+ * Every frame: position += velocity * dt,  velocity *= retainFraction^dt
+ *
+ * This eliminates all stop-start artefacts that came from chaining GSAP tweens
+ * with `await` — which introduced JS event-loop gaps between every segment and
+ * caused `power3.out` to brake each segment to zero before the next one began.
+ *
+ * The winner ball is guided by soft velocity steering: each frame its velocity
+ * is lerped toward the direction / magnitude needed to arrive at the pocket on
+ * time.  No waypoints, no snapping, no phase boundaries.
+ */
 
-interface Waypoint { x: number; y: number; dur: number; ease: string }
+import { gsap } from 'gsap';
+import { BallSprite }    from '../objects/BallSprite';
+import { CueBall }       from '../objects/CueBall';
+import { PoolTable }     from '../objects/PoolTable';
+import { RoundOutcome }  from '../state/GameState';
+import {
+  RACK_POSITIONS, CUE_BALL_PRESETS, POCKETS, FELT, BALL_RADIUS,
+} from '../config/gameConfig';
+import { SCATTER_PRESETS } from '../config/scatterPresets';
+
+// ─── Per-ball physics state ──────────────────────────────────────────────────
+interface BallState {
+  ball:     BallSprite;
+  vx:       number;     // px / s
+  vy:       number;     // px / s
+  /** Fraction of velocity that survives after 1 full second (0 < retain < 1). */
+  retain:   number;
+  role:     'normal' | 'winner' | 'nearMiss' | 'secondary';
+  active:   boolean;
+  pocketed: boolean;
+
+  // winner
+  pocketX?:      number;
+  pocketY?:      number;
+  guidanceStart?: number;  // elapsed (s) when steering begins
+  pocketTime?:   number;   // elapsed (s) when pocket must fire
+  pocketId?:     number;
+
+  // near-miss
+  nmPocketX?:   number;
+  nmPocketY?:   number;
+  nmDeflectAt?: number;    // elapsed (s) to apply deflection
+  nmDeflected?: boolean;
+
+  // secondary
+  secPocketX?:  number;
+  secPocketY?:  number;
+  secPocketAt?: number;
+}
+
+type TickerFn = (dt: { deltaMS: number }) => void;
 
 export class AnimationController {
-  private balls:   BallSprite[];
-  private cueBall: CueBall;
-  private table:   PoolTable;
+  private activeUpdate: TickerFn | null = null;
 
-  constructor(balls: BallSprite[], cueBall: CueBall, table: PoolTable) {
-    this.balls   = balls;
-    this.cueBall = cueBall;
-    this.table   = table;
-  }
+  constructor(
+    private balls:        BallSprite[],
+    private cueBall:      CueBall,
+    private table:        PoolTable,
+    private tickerAdd:    (fn: TickerFn) => void,
+    private tickerRemove: (fn: TickerFn) => void,
+  ) {}
 
-  /** Play the full round animation. Returns a Promise that resolves when done. */
+  // ─── Public API ─────────────────────────────────────────────────────────────
+
   async play(outcome: RoundOutcome): Promise<void> {
-    const preset = SCATTER_PRESETS_DATA.find(p => p.id === outcome.scatterPresetId)
-      ?? SCATTER_PRESETS_DATA[0];
+    const presetData = SCATTER_PRESETS.find(p => p.id === outcome.scatterPresetId)
+      ?? SCATTER_PRESETS[0];
 
-    const cuePre = CUE_BALL_PRESETS[outcome.cueBallStartPresetId];
+    const cuePre    = CUE_BALL_PRESETS[outcome.cueBallStartPresetId];
     const winPocket = POCKETS[outcome.winningPocketId];
 
-    // ── 1. Show cue ball + stick ──────────────────────────────────────────────
+    // ── Cue ball: show, pullback, strike, travel ─────────────────────────────
+    // These three steps are short GSAP sequences on a single sprite (no chaining
+    // problem — they run sequentially and don't cause ball motion jitter).
     await this.cueBall.showAt(cuePre.x, cuePre.y);
-
-    // ── 2. Cue strike animation ───────────────────────────────────────────────
     await this.cueBall.animateStrike();
-
-    // ── 3. Cue ball travels to rack ───────────────────────────────────────────
-    // Aim slightly above the bottom row of the rack
+    const rackImpactX = RACK_POSITIONS[4].x;
     const rackImpactY = RACK_POSITIONS[6].y + BALL_RADIUS + 2;
-    const rackImpactX = RACK_POSITIONS[4].x; // centre
     await this.cueBall.travelTo(rackImpactX, rackImpactY, 0.22);
 
-    // ── 4. Impact ─────────────────────────────────────────────────────────────
     this.cueBall.impact();
     this.table.addTableShake();
     await sleep(60);
     this.cueBall.disappear();
 
-    // ── 5. Scatter all balls simultaneously ───────────────────────────────────
-    const winnerBall = this.balls[outcome.winningBallId - 1]; // 0-indexed array
-    const winnerPocketPos = { x: winPocket.x, y: winPocket.y };
+    // ── Build physics state for all 8 balls ──────────────────────────────────
     const firstPocketSec  = outcome.firstPocketTimeSec;
+    // Guidance starts at 35 % of the pocket window so the ball has time to
+    // steer smoothly — not a last-second lunge.
+    const guidanceStart   = firstPocketSec * 0.35;
 
-    const scatterPromises: Promise<void>[] = [];
-
-    for (let i = 0; i < this.balls.length; i++) {
-      const ball    = this.balls[i];
-      const ballId  = i + 1;
-      const vel     = preset.velocities[i];
-      const startX  = RACK_POSITIONS[i].x;
-      const startY  = RACK_POSITIONS[i].y;
-
+    const states: BallState[] = this.balls.map((ball, i) => {
+      const ballId     = i + 1;
+      const vel        = presetData.velocities[i];
       const isWinner   = ballId === outcome.winningBallId;
       const isNearMiss = ballId === outcome.nearMissBallId;
       const isSecondary = outcome.secondaryPocketedBallIds?.includes(ballId) ?? false;
 
-      let waypoints: Waypoint[];
+      // Vary initial speed slightly so balls don't all travel the same distance
+      const speed = vel.speed * (0.82 + Math.random() * 0.36);
+
+      const st: BallState = {
+        ball,
+        vx:      vel.vx * speed,
+        vy:      vel.vy * speed,
+        // Winner retains speed longer (0.35 → 35 % left after 1 s);
+        // normal balls brake faster (0.08 → 8 % left after 1 s).
+        retain:  isWinner ? 0.35 : 0.08,
+        role:    isWinner ? 'winner'
+               : isNearMiss ? 'nearMiss'
+               : isSecondary ? 'secondary'
+               : 'normal',
+        active:  true,
+        pocketed: false,
+      };
 
       if (isWinner) {
-        waypoints = this.winnerPath(startX, startY, vel.vx, vel.vy, winnerPocketPos, firstPocketSec);
-      } else if (isNearMiss && outcome.nearMissPocketId !== undefined) {
-        const nmPocket = POCKETS[outcome.nearMissPocketId];
-        waypoints = this.nearMissPath(startX, startY, vel.vx, vel.vy, nmPocket, firstPocketSec);
-      } else if (isSecondary) {
-        const secondaryPocket = POCKETS[(outcome.winningPocketId + 2) % 6];
-        waypoints = this.secondaryPath(startX, startY, vel.vx, vel.vy, secondaryPocket, firstPocketSec + 0.5);
-      } else {
-        waypoints = this.scatterPath(startX, startY, vel.vx, vel.vy, vel.speed);
+        st.pocketX      = winPocket.x;
+        st.pocketY      = winPocket.y;
+        st.guidanceStart = guidanceStart;
+        st.pocketTime   = firstPocketSec;
+        st.pocketId     = outcome.winningPocketId;
       }
 
-      scatterPromises.push(this.animateBall(ball, waypoints, {
-        isWinner,
-        isNearMiss: isNearMiss && outcome.nearMissPocketId !== undefined,
-        pocketPos: isWinner ? winnerPocketPos : undefined,
-        firstPocketSec,
-        isSecondary,
-        secondaryPocketPos: isSecondary
-          ? { x: POCKETS[(outcome.winningPocketId + 2) % 6].x, y: POCKETS[(outcome.winningPocketId + 2) % 6].y }
-          : undefined,
-        secondaryPocketSec: firstPocketSec + 0.5,
-        pocketIdForFlash: isWinner ? outcome.winningPocketId : undefined,
-      }));
-    }
+      if (isNearMiss && outcome.nearMissPocketId !== undefined) {
+        const nmP       = POCKETS[outcome.nearMissPocketId];
+        st.nmPocketX    = nmP.x;
+        st.nmPocketY    = nmP.y;
+        // Deflect well before winner pockets so the player sees the near-miss
+        st.nmDeflectAt  = firstPocketSec * 0.62;
+        st.nmDeflected  = false;
+      }
 
-    // Wait for all balls to finish (winner pockets first, others settle)
-    await Promise.all(scatterPromises);
-  }
+      if (isSecondary) {
+        const secP       = POCKETS[(outcome.winningPocketId + 2) % 6];
+        st.secPocketX   = secP.x;
+        st.secPocketY   = secP.y;
+        st.secPocketAt  = firstPocketSec + 0.65;
+      }
 
-  private async animateBall(
-    ball: BallSprite,
-    waypoints: Waypoint[],
-    opts: {
-      isWinner:          boolean;
-      isNearMiss:        boolean;
-      pocketPos?:        { x: number; y: number };
-      firstPocketSec:    number;
-      isSecondary:       boolean;
-      secondaryPocketPos?: { x: number; y: number };
-      secondaryPocketSec?: number;
-      pocketIdForFlash?: number;
-    },
-  ): Promise<void> {
-    let elapsed = 0;
-    for (const wp of waypoints) {
-      await new Promise<void>(resolve => {
-        gsap.to(ball, {
-          x: wp.x, y: wp.y,
-          duration: wp.dur,
-          ease: wp.ease,
-          onComplete: resolve,
-        });
-      });
-      elapsed += wp.dur;
+      return st;
+    });
 
-      // Winner: pocket after last movement waypoint
-      if (opts.isWinner && elapsed >= opts.firstPocketSec - 0.05) {
-        await new Promise<void>(resolve => ball.pocket(resolve));
-        if (opts.pocketIdForFlash !== undefined) {
-          this.table.flashPocket(opts.pocketIdForFlash);
+    // ── Physics loop ─────────────────────────────────────────────────────────
+    return new Promise<void>((resolve) => {
+      let elapsed          = 0;
+      let winnerPocketedAt: number | null = null;
+
+      const update: TickerFn = ({ deltaMS }) => {
+        // Cap dt to avoid enormous jumps if tab is backgrounded
+        const dt = Math.min(deltaMS / 1000, 0.05);
+        elapsed += dt;
+
+        for (const bs of states) {
+          if (!bs.active || bs.pocketed) continue;
+
+          // ── Winner: soft-steering toward pocket ──────────────────────────
+          if (bs.role === 'winner') {
+            const tx   = bs.pocketX! - bs.ball.x;
+            const ty   = bs.pocketY! - bs.ball.y;
+            const dist = Math.sqrt(tx * tx + ty * ty) + 0.001;
+
+            // Pocket capture: within 1.8 ball radii OR time overrun
+            if (
+              (elapsed >= bs.guidanceStart! - 0.05 && dist < BALL_RADIUS * 1.8) ||
+              elapsed >= bs.pocketTime! + 0.2
+            ) {
+              bs.pocketed = true;
+              bs.active   = false;
+              winnerPocketedAt = elapsed;
+              const pid = bs.pocketId;
+              bs.ball.pocket(() => {
+                if (pid !== undefined) this.table.flashPocket(pid);
+              });
+              continue;
+            }
+
+            // Steering: lerp velocity toward the direction and magnitude
+            // needed to arrive exactly at pocket on time.
+            if (elapsed >= bs.guidanceStart!) {
+              const timeLeft    = Math.max(bs.pocketTime! - elapsed, 0.04);
+              // neededSpeed = how fast we must go to cover remaining distance
+              const neededSpeed = Math.min(dist / timeLeft, 700);
+              const desiredVx   = (tx / dist) * neededSpeed;
+              const desiredVy   = (ty / dist) * neededSpeed;
+              // Blend rate: converges in ~0.25 s so the turn feels organic
+              const blend = Math.min(1.0, dt * 5.5);
+              bs.vx += (desiredVx - bs.vx) * blend;
+              bs.vy += (desiredVy - bs.vy) * blend;
+            }
+          }
+
+          // ── Near-miss: physics approach then perpendicular deflect ────────
+          if (bs.role === 'nearMiss' && !bs.nmDeflected && elapsed >= bs.nmDeflectAt!) {
+            const tx   = bs.nmPocketX! - bs.ball.x;
+            const ty   = bs.nmPocketY! - bs.ball.y;
+            const dist = Math.sqrt(tx * tx + ty * ty) + 0.001;
+            // Remove the velocity component pointing toward the pocket, then
+            // add a perpendicular kick so the ball skims past instead of sinking.
+            const dot = (bs.vx * tx + bs.vy * ty) / (dist * dist);
+            bs.vx -= 2.1 * dot * tx;
+            bs.vy -= 2.1 * dot * ty;
+            bs.nmDeflected = true;
+          }
+
+          // ── Secondary: guided into its pocket after a delay ───────────────
+          if (bs.role === 'secondary' && bs.secPocketAt !== undefined) {
+            const tx   = bs.secPocketX! - bs.ball.x;
+            const ty   = bs.secPocketY! - bs.ball.y;
+            const dist = Math.sqrt(tx * tx + ty * ty) + 0.001;
+
+            if (dist < BALL_RADIUS * 1.8 || elapsed >= bs.secPocketAt + 0.2) {
+              bs.pocketed = true;
+              bs.active   = false;
+              bs.ball.pocket();
+              continue;
+            }
+            // Gentle guidance starting 0.9 s before scheduled pocket time
+            if (elapsed >= bs.secPocketAt - 0.9) {
+              const timeLeft    = Math.max(bs.secPocketAt - elapsed, 0.04);
+              const neededSpeed = Math.min(dist / timeLeft, 500);
+              const desiredVx   = (tx / dist) * neededSpeed;
+              const desiredVy   = (ty / dist) * neededSpeed;
+              const blend = Math.min(1.0, dt * 3.5);
+              bs.vx += (desiredVx - bs.vx) * blend;
+              bs.vy += (desiredVy - bs.vy) * blend;
+            }
+          }
+
+          // ── Integrate position ────────────────────────────────────────────
+          bs.ball.x += bs.vx * dt;
+          bs.ball.y += bs.vy * dt;
+
+          // ── Cushion bounce ────────────────────────────────────────────────
+          // Balls reflect off the felt boundary with ~72 % energy retained.
+          const R = BALL_RADIUS;
+          if (bs.ball.x < FELT.left + R) {
+            bs.ball.x = FELT.left + R;
+            bs.vx = Math.abs(bs.vx) * 0.72;
+          } else if (bs.ball.x > FELT.right - R) {
+            bs.ball.x = FELT.right - R;
+            bs.vx = -Math.abs(bs.vx) * 0.72;
+          }
+          if (bs.ball.y < FELT.top + R) {
+            bs.ball.y = FELT.top + R;
+            bs.vy = Math.abs(bs.vy) * 0.72;
+          } else if (bs.ball.y > FELT.bottom - R) {
+            bs.ball.y = FELT.bottom - R;
+            bs.vy = -Math.abs(bs.vy) * 0.72;
+          }
+
+          // ── Friction / damping ────────────────────────────────────────────
+          // Exponential decay: v(t) = v0 × retain^t
+          const d = Math.pow(bs.retain, dt);
+          bs.vx  *= d;
+          bs.vy  *= d;
         }
-        break;
-      }
 
-      // Secondary: pocket after its waypoints
-      if (opts.isSecondary && elapsed >= (opts.secondaryPocketSec ?? 99)) {
-        await new Promise<void>(resolve => ball.pocket(resolve));
-        break;
-      }
-    }
+        // ── Resolve: 0.8 s after winner pockets, settle everything ───────────
+        if (winnerPocketedAt !== null && elapsed - winnerPocketedAt >= 0.80) {
+          this.cleanup(states, update, resolve);
+          return;
+        }
+        // Safety timeout in case something goes wrong
+        if (elapsed >= 6.0) {
+          this.cleanup(states, update, resolve);
+        }
+      };
+
+      this.activeUpdate = update;
+      this.tickerAdd(update);
+    });
   }
 
-  // ─── Path generators ──────────────────────────────────────────────────────
-
-  /** Winner moves toward pocket in two stages: scatter then guided approach. */
-  private winnerPath(
-    sx: number, sy: number,
-    vx: number, vy: number,
-    pocket: { x: number; y: number },
-    totalSec: number,
-  ): Waypoint[] {
-    const scatter = clamp2d(sx + vx * 55, sy + vy * 55);
-    const t1 = totalSec * 0.38;
-    const t2 = totalSec * 0.62;
-    return [
-      { x: scatter.x, y: scatter.y, dur: t1, ease: 'power3.out' },
-      { x: pocket.x,  y: pocket.y,  dur: t2, ease: 'power1.in'  },
-    ];
+  private cleanup(states: BallState[], update: TickerFn, resolve: () => void): void {
+    for (const bs of states) bs.active = false;
+    this.tickerRemove(update);
+    this.activeUpdate = null;
+    resolve();
   }
 
-  /** Near-miss ball approaches pocket but deflects before dropping in. */
-  private nearMissPath(
-    sx: number, sy: number,
-    vx: number, vy: number,
-    pocket: { x: number; y: number },
-    winnerTimeSec: number,
-  ): Waypoint[] {
-    const arriveTime = winnerTimeSec - 0.35;
-    const dx = pocket.x - sx;
-    const dy = pocket.y - sy;
-    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    // Approach to within ~34 px of pocket centre
-    const approachX = pocket.x - (dx / dist) * (BALL_RADIUS + 32);
-    const approachY = pocket.y - (dy / dist) * (BALL_RADIUS + 32);
-    // Deflect perpendicular
-    const deflectX = clamp(approachX + (dy / dist) * 44, FELT.left + 15, FELT.right - 15);
-    const deflectY = clamp(approachY - (dx / dist) * 44, FELT.top  + 15, FELT.bottom - 15);
-    // Come to rest
-    const restX = clamp(deflectX + vx * 30, FELT.left + 15, FELT.right - 15);
-    const restY = clamp(deflectY + vy * 30, FELT.top  + 15, FELT.bottom - 15);
-
-    return [
-      { x: clamp2d(sx + vx * 45, sy + vy * 45).x,
-        y: clamp2d(sx + vx * 45, sy + vy * 45).y,
-        dur: arriveTime * 0.35, ease: 'power2.out' },
-      { x: approachX, y: approachY, dur: arriveTime * 0.50, ease: 'power2.out' },
-      { x: deflectX,  y: deflectY,  dur: 0.22,              ease: 'power2.in'  },
-      { x: restX,     y: restY,     dur: 0.55,              ease: 'power3.out' },
-    ];
-  }
-
-  private secondaryPath(
-    sx: number, sy: number,
-    vx: number, vy: number,
-    pocket: { x: number; y: number },
-    totalSec: number,
-  ): Waypoint[] {
-    const mid = clamp2d(sx + vx * 70, sy + vy * 55);
-    const t1  = totalSec * 0.55;
-    const t2  = totalSec * 0.45;
-    return [
-      { x: mid.x,    y: mid.y,    dur: t1, ease: 'power3.out' },
-      { x: pocket.x, y: pocket.y, dur: t2, ease: 'power1.in'  },
-    ];
-  }
-
-  /** Generic scatter: move fast then decelerate onto the felt. */
-  private scatterPath(
-    sx: number, sy: number,
-    vx: number, vy: number,
-    speed: number,
-  ): Waypoint[] {
-    // Primary scatter destination
-    const dist    = speed * 0.80;
-    let endX      = sx + vx * dist;
-    let endY      = sy + vy * dist;
-
-    // Wall bounce check
-    const hasBounce =
-      endX < FELT.left  + BALL_RADIUS + 8 ||
-      endX > FELT.right - BALL_RADIUS - 8 ||
-      endY < FELT.top   + BALL_RADIUS + 8 ||
-      endY > FELT.bottom - BALL_RADIUS - 8;
-
-    if (hasBounce) {
-      const midX  = clamp(sx + vx * dist * 0.45, FELT.left + 16, FELT.right - 16);
-      const midY  = clamp(sy + vy * dist * 0.45, FELT.top  + 16, FELT.bottom - 16);
-      endX = clamp(endX, FELT.left + 16, FELT.right - 16);
-      endY = clamp(endY, FELT.top  + 16, FELT.bottom - 16);
-      return [
-        { x: midX, y: midY, dur: 0.42, ease: 'power1.out' },
-        { x: endX, y: endY, dur: 0.55, ease: 'power3.out' },
-      ];
-    }
-
-    endX = clamp(endX, FELT.left + 16, FELT.right - 16);
-    endY = clamp(endY, FELT.top  + 16, FELT.bottom - 16);
-    return [
-      { x: endX, y: endY, dur: 0.78, ease: 'power3.out' },
-    ];
-  }
-
-  /** Kill all ongoing gsap tweens — called on reset. */
   killAll(): void {
+    if (this.activeUpdate) {
+      this.tickerRemove(this.activeUpdate);
+      this.activeUpdate = null;
+    }
     gsap.killTweensOf(this.cueBall);
     gsap.killTweensOf(this.cueBall.stick);
     gsap.killTweensOf(this.cueBall.scale);
@@ -253,16 +300,6 @@ export class AnimationController {
   }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
-function clamp2d(x: number, y: number): { x: number; y: number } {
-  return {
-    x: clamp(x, FELT.left  + BALL_RADIUS + 4, FELT.right  - BALL_RADIUS - 4),
-    y: clamp(y, FELT.top   + BALL_RADIUS + 4, FELT.bottom - BALL_RADIUS - 4),
-  };
-}
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }
