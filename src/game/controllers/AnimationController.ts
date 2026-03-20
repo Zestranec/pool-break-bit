@@ -1,50 +1,62 @@
 /**
  * AnimationController
  *
- * Motion model: per-frame physics integration running on the PixiJS ticker.
- * Every frame: position += velocity * dt,  velocity *= retainFraction^dt
+ * Physics model: per-frame simulation with ball-ball elastic collisions,
+ * rolling friction, and cushion bounces.  Outcome remains deterministic —
+ * the winner ball is guided smoothly toward its predetermined pocket while
+ * all other balls follow pure physics.
  *
- * This eliminates all stop-start artefacts that came from chaining GSAP tweens
- * with `await` — which introduced JS event-loop gaps between every segment and
- * caused `power3.out` to brake each segment to zero before the next one began.
- *
- * The winner ball is guided by soft velocity steering: each frame its velocity
- * is lerped toward the direction / magnitude needed to arrive at the pocket on
- * time.  No waypoints, no snapping, no phase boundaries.
+ * Each frame runs three passes:
+ *   1. Steering  — apply winner guidance / near-miss deflect / secondary aim
+ *   2. Integrate — position += velocity * dt
+ *   3. Collide   — ball-ball elastic response, rail bounce, friction, pockets
  */
 
 import { gsap } from 'gsap';
-import { BallSprite }    from '../objects/BallSprite';
-import { CueBall }       from '../objects/CueBall';
-import { PoolTable }     from '../objects/PoolTable';
-import { RoundOutcome }  from '../state/GameState';
+import { BallSprite }   from '../objects/BallSprite';
+import { CueBall }      from '../objects/CueBall';
+import { PoolTable }    from '../objects/PoolTable';
+import { RoundOutcome } from '../state/GameState';
 import {
-  RACK_POSITIONS, CUE_BALL_PRESETS, POCKETS, FELT, BALL_RADIUS,
+  RACK_POSITIONS, POCKETS, FELT, BALL_RADIUS, POCKET_RADIUS,
 } from '../config/gameConfig';
 import { SCATTER_PRESETS } from '../config/scatterPresets';
 
-// ─── Per-ball physics state ──────────────────────────────────────────────────
+// ── Physics constants ─────────────────────────────────────────────────────────
+/** Fraction of speed surviving 1 s of rolling on felt (all normal balls).
+ *  0.38 gives ~300 px total travel from 290 px/s — enough to cross the
+ *  taller portrait table before stopping. */
+const ROLLING_RETAIN   = 0.38;
+/** Winner retains more speed so guidance can steer it reliably to its pocket. */
+const WINNER_RETAIN    = 0.55;
+/** Energy fraction kept after a cushion bounce (~65 % is realistic for felt rails). */
+const RAIL_RETENTION   = 0.65;
+/** Coefficient of restitution for ball-ball collisions (pool balls ≈ 0.85–0.92). */
+const BALL_RESTITUTION = 0.87;
+/** Balls below this speed (px/s) are fully stopped — prevents eternal slow drift. */
+const STOP_SPEED       = 5;
+
+// ─── Per-ball physics state ───────────────────────────────────────────────────
 interface BallState {
   ball:     BallSprite;
-  vx:       number;     // px / s
-  vy:       number;     // px / s
-  /** Fraction of velocity that survives after 1 full second (0 < retain < 1). */
+  vx:       number;
+  vy:       number;
   retain:   number;
   role:     'normal' | 'winner' | 'nearMiss' | 'secondary';
   active:   boolean;
   pocketed: boolean;
 
   // winner
-  pocketX?:      number;
-  pocketY?:      number;
-  guidanceStart?: number;  // elapsed (s) when steering begins
-  pocketTime?:   number;   // elapsed (s) when pocket must fire
-  pocketId?:     number;
+  pocketX?:       number;
+  pocketY?:       number;
+  guidanceStart?: number;
+  pocketTime?:    number;
+  pocketId?:      number;
 
   // near-miss
   nmPocketX?:   number;
   nmPocketY?:   number;
-  nmDeflectAt?: number;    // elapsed (s) to apply deflection
+  nmDeflectAt?: number;
   nmDeflected?: boolean;
 
   // secondary
@@ -54,6 +66,53 @@ interface BallState {
 }
 
 type TickerFn = (dt: { deltaMS: number }) => void;
+
+// ── Ball-ball elastic collision resolution ────────────────────────────────────
+// Runs an O(n²) sweep over all non-pocketed pairs each frame.
+// With 15 balls that is at most 105 pair checks — negligible cost.
+function resolveCollisions(states: BallState[]): void {
+  const minDist   = BALL_RADIUS * 2;
+  const minDistSq = minDist * minDist;
+
+  for (let ai = 0; ai < states.length - 1; ai++) {
+    const sa = states[ai];
+    if (sa.pocketed) continue;
+
+    for (let bi = ai + 1; bi < states.length; bi++) {
+      const sb = states[bi];
+      if (sb.pocketed) continue;
+
+      const dx = sb.ball.x - sa.ball.x;
+      const dy = sb.ball.y - sa.ball.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq >= minDistSq || distSq < 0.0001) continue;
+
+      const dist = Math.sqrt(distSq);
+      const nx   = dx / dist;
+      const ny   = dy / dist;
+
+      // Depenetrate — push the two balls apart equally along the normal.
+      const push = (minDist - dist) * 0.5;
+      sa.ball.x -= nx * push;
+      sa.ball.y -= ny * push;
+      sb.ball.x += nx * push;
+      sb.ball.y += ny * push;
+
+      // Relative velocity of a toward b along the collision normal.
+      const rvn = (sa.vx - sb.vx) * nx + (sa.vy - sb.vy) * ny;
+      if (rvn <= 0) continue; // already separating
+
+      // Equal-mass elastic impulse with restitution coefficient.
+      const j = (1 + BALL_RESTITUTION) * rvn / 2;
+      sa.vx -= j * nx;
+      sa.vy -= j * ny;
+      sb.vx += j * nx;
+      sb.vy += j * ny;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export class AnimationController {
   private activeUpdate: TickerFn | null = null;
@@ -66,107 +125,112 @@ export class AnimationController {
     private tickerRemove: (fn: TickerFn) => void,
   ) {}
 
-  // ─── Public API ─────────────────────────────────────────────────────────────
+  // ─── Public API ──────────────────────────────────────────────────────────────
 
   async play(outcome: RoundOutcome): Promise<void> {
     const presetData = SCATTER_PRESETS.find(p => p.id === outcome.scatterPresetId)
       ?? SCATTER_PRESETS[0];
 
-    const cuePre    = CUE_BALL_PRESETS[outcome.cueBallStartPresetId];
-    const winPocket = POCKETS[outcome.winningPocketId];
+    const winPocket = outcome.winningBallId !== null ? POCKETS[outcome.winningPocketId] : null;
 
-    // ── Cue ball: show, pullback, strike, travel ─────────────────────────────
-    // These three steps are short GSAP sequences on a single sprite (no chaining
-    // problem — they run sequentially and don't cause ball motion jitter).
-    await this.cueBall.showAt(cuePre.x, cuePre.y);
+    // ── Cue ball: show, pullback, strike, travel ──────────────────────────────
+    const rackImpactX = RACK_POSITIONS[0].x;
+    const rackImpactY = RACK_POSITIONS[0].y + BALL_RADIUS + 2;
+    const cueX = outcome.cueBallSpawnX;
+    const cueY = outcome.cueBallSpawnY;
+
+    this.cueBall.rotation = Math.atan2(rackImpactX - cueX, cueY - rackImpactY);
+    await this.cueBall.showAt(cueX, cueY);
     await this.cueBall.animateStrike();
-    const rackImpactX = RACK_POSITIONS[4].x;
-    const rackImpactY = RACK_POSITIONS[6].y + BALL_RADIUS + 2;
     await this.cueBall.travelTo(rackImpactX, rackImpactY, 0.22);
 
     this.cueBall.impact();
     this.table.addTableShake();
+    this.table.rackImpactFlash(rackImpactX, rackImpactY);
     await sleep(60);
     this.cueBall.disappear();
 
-    // ── Build physics state for all 8 balls ──────────────────────────────────
-    const firstPocketSec  = outcome.firstPocketTimeSec;
-    // Guidance starts at 35 % of the pocket window so the ball has time to
-    // steer smoothly — not a last-second lunge.
-    const guidanceStart   = firstPocketSec * 0.35;
+    // ── Build physics state for all 15 balls ──────────────────────────────────
+    const firstPocketSec = outcome.firstPocketTimeSec;
+    // Guidance begins at 35 % of the pocket window — enough lead-time to
+    // steer smoothly without an obvious last-second lunge.
+    const guidanceStart  = firstPocketSec * 0.35;
 
     const states: BallState[] = this.balls.map((ball, i) => {
-      const ballId     = i + 1;
-      const vel        = presetData.velocities[i];
-      const isWinner   = ballId === outcome.winningBallId;
-      const isNearMiss = ballId === outcome.nearMissBallId;
+      const ballId      = ball.ballId;
+      const vel         = presetData.velocities[i];
+      const isWinner    = outcome.winningBallId !== null && ballId === outcome.winningBallId;
+      const isNearMiss  = ballId === outcome.nearMissBallId;
       const isSecondary = outcome.secondaryPocketedBallIds?.includes(ballId) ?? false;
 
-      // Vary initial speed slightly so balls don't all travel the same distance
-      const speed = vel.speed * (0.82 + Math.random() * 0.36);
+      // ±10 % jitter for visual variety; the speed gradient is in the preset.
+      const speed = vel.speed * (0.90 + Math.random() * 0.20);
 
       const st: BallState = {
         ball,
         vx:      vel.vx * speed,
         vy:      vel.vy * speed,
-        // Winner retains speed longer (0.35 → 35 % left after 1 s);
-        // normal balls brake faster (0.08 → 8 % left after 1 s).
-        retain:  isWinner ? 0.35 : 0.08,
-        role:    isWinner ? 'winner'
-               : isNearMiss ? 'nearMiss'
+        retain:  isWinner ? WINNER_RETAIN : ROLLING_RETAIN,
+        role:    isWinner    ? 'winner'
+               : isNearMiss  ? 'nearMiss'
                : isSecondary ? 'secondary'
                : 'normal',
-        active:  true,
+        active:   true,
         pocketed: false,
       };
 
-      if (isWinner) {
-        st.pocketX      = winPocket.x;
-        st.pocketY      = winPocket.y;
+      if (isWinner && winPocket) {
+        st.pocketX       = winPocket.x;
+        st.pocketY       = winPocket.y;
         st.guidanceStart = guidanceStart;
-        st.pocketTime   = firstPocketSec;
-        st.pocketId     = outcome.winningPocketId;
+        st.pocketTime    = firstPocketSec;
+        st.pocketId      = outcome.winningPocketId;
       }
 
       if (isNearMiss && outcome.nearMissPocketId !== undefined) {
-        const nmP       = POCKETS[outcome.nearMissPocketId];
-        st.nmPocketX    = nmP.x;
-        st.nmPocketY    = nmP.y;
-        // Deflect well before winner pockets so the player sees the near-miss
-        st.nmDeflectAt  = firstPocketSec * 0.62;
-        st.nmDeflected  = false;
+        const nmP      = POCKETS[outcome.nearMissPocketId];
+        st.nmPocketX   = nmP.x;
+        st.nmPocketY   = nmP.y;
+        st.nmDeflectAt = firstPocketSec * 0.62;
+        st.nmDeflected = false;
       }
 
       if (isSecondary) {
-        const secP       = POCKETS[(outcome.winningPocketId + 2) % 6];
-        st.secPocketX   = secP.x;
-        st.secPocketY   = secP.y;
-        st.secPocketAt  = firstPocketSec + 0.65;
+        const secP     = POCKETS[(outcome.winningPocketId + 2) % 6];
+        st.secPocketX  = secP.x;
+        st.secPocketY  = secP.y;
+        st.secPocketAt = firstPocketSec + 0.65;
       }
 
       return st;
     });
 
-    // ── Physics loop ─────────────────────────────────────────────────────────
+    // ── Physics loop ──────────────────────────────────────────────────────────
+    // For null-winner outcomes (cue scratch / house), resolve shortly after
+    // the first-pocket window expires rather than waiting for the 6.5 s safety.
+    const nullWinnerResolveAt = outcome.winningBallId === null
+      ? firstPocketSec + 0.85
+      : Infinity;
+
     return new Promise<void>((resolve) => {
       let elapsed          = 0;
       let winnerPocketedAt: number | null = null;
 
       const update: TickerFn = ({ deltaMS }) => {
-        // Cap dt to avoid enormous jumps if tab is backgrounded
         const dt = Math.min(deltaMS / 1000, 0.05);
         elapsed += dt;
 
+        // ── Pass 1: steering + position integration ───────────────────────────
         for (const bs of states) {
-          if (!bs.active || bs.pocketed) continue;
+          if (bs.pocketed) continue;
 
-          // ── Winner: soft-steering toward pocket ──────────────────────────
+          // ── Winner: soft velocity steering toward pocket ──────────────────
           if (bs.role === 'winner') {
             const tx   = bs.pocketX! - bs.ball.x;
             const ty   = bs.pocketY! - bs.ball.y;
             const dist = Math.sqrt(tx * tx + ty * ty) + 0.001;
 
-            // Pocket capture: within 1.8 ball radii OR time overrun
+            // Pocket capture: close enough, OR time overrun safety
             if (
               (elapsed >= bs.guidanceStart! - 0.05 && dist < BALL_RADIUS * 1.8) ||
               elapsed >= bs.pocketTime! + 0.2
@@ -181,16 +245,15 @@ export class AnimationController {
               continue;
             }
 
-            // Steering: lerp velocity toward the direction and magnitude
-            // needed to arrive exactly at pocket on time.
+            // Steering: smoothly bend velocity toward direction + speed needed
+            // to arrive at pocket on time.
             if (elapsed >= bs.guidanceStart!) {
               const timeLeft    = Math.max(bs.pocketTime! - elapsed, 0.04);
-              // neededSpeed = how fast we must go to cover remaining distance
-              const neededSpeed = Math.min(dist / timeLeft, 700);
+              const neededSpeed = Math.min(dist / timeLeft, 600);
               const desiredVx   = (tx / dist) * neededSpeed;
               const desiredVy   = (ty / dist) * neededSpeed;
-              // Blend rate: converges in ~0.25 s so the turn feels organic
-              const blend = Math.min(1.0, dt * 5.5);
+              // Blend converges in ~0.25 s — organic, not a snap.
+              const blend = Math.min(1.0, dt * 5.0);
               bs.vx += (desiredVx - bs.vx) * blend;
               bs.vy += (desiredVy - bs.vy) * blend;
             }
@@ -201,8 +264,7 @@ export class AnimationController {
             const tx   = bs.nmPocketX! - bs.ball.x;
             const ty   = bs.nmPocketY! - bs.ball.y;
             const dist = Math.sqrt(tx * tx + ty * ty) + 0.001;
-            // Remove the velocity component pointing toward the pocket, then
-            // add a perpendicular kick so the ball skims past instead of sinking.
+            // Cancel the toward-pocket component and add a tangential kick.
             const dot = (bs.vx * tx + bs.vy * ty) / (dist * dist);
             bs.vx -= 2.1 * dot * tx;
             bs.vy -= 2.1 * dot * ty;
@@ -221,10 +283,9 @@ export class AnimationController {
               bs.ball.pocket();
               continue;
             }
-            // Gentle guidance starting 0.9 s before scheduled pocket time
             if (elapsed >= bs.secPocketAt - 0.9) {
               const timeLeft    = Math.max(bs.secPocketAt - elapsed, 0.04);
-              const neededSpeed = Math.min(dist / timeLeft, 500);
+              const neededSpeed = Math.min(dist / timeLeft, 400);
               const desiredVx   = (tx / dist) * neededSpeed;
               const desiredVy   = (ty / dist) * neededSpeed;
               const blend = Math.min(1.0, dt * 3.5);
@@ -233,42 +294,78 @@ export class AnimationController {
             }
           }
 
-          // ── Integrate position ────────────────────────────────────────────
+          // Integrate position
           bs.ball.x += bs.vx * dt;
           bs.ball.y += bs.vy * dt;
+        }
 
-          // ── Cushion bounce ────────────────────────────────────────────────
-          // Balls reflect off the felt boundary with ~72 % energy retained.
-          const R = BALL_RADIUS;
+        // ── Pass 2: ball-ball collision resolution ────────────────────────────
+        // Runs after integration so balls that just moved into overlap are caught.
+        resolveCollisions(states);
+
+        // ── Pass 3: rails, friction, stopping, pocket capture ─────────────────
+        const R = BALL_RADIUS;
+        for (const bs of states) {
+          if (bs.pocketed) continue;
+
+          // Cushion bounce — reflect with energy loss.
+          // Corner-pocket gaps are handled implicitly: balls moving toward a
+          // pocket opening won't hit the cushion there.
           if (bs.ball.x < FELT.left + R) {
             bs.ball.x = FELT.left + R;
-            bs.vx = Math.abs(bs.vx) * 0.72;
+            bs.vx = Math.abs(bs.vx) * RAIL_RETENTION;
           } else if (bs.ball.x > FELT.right - R) {
             bs.ball.x = FELT.right - R;
-            bs.vx = -Math.abs(bs.vx) * 0.72;
+            bs.vx = -Math.abs(bs.vx) * RAIL_RETENTION;
           }
           if (bs.ball.y < FELT.top + R) {
             bs.ball.y = FELT.top + R;
-            bs.vy = Math.abs(bs.vy) * 0.72;
+            bs.vy = Math.abs(bs.vy) * RAIL_RETENTION;
           } else if (bs.ball.y > FELT.bottom - R) {
             bs.ball.y = FELT.bottom - R;
-            bs.vy = -Math.abs(bs.vy) * 0.72;
+            bs.vy = -Math.abs(bs.vy) * RAIL_RETENTION;
           }
 
-          // ── Friction / damping ────────────────────────────────────────────
-          // Exponential decay: v(t) = v0 × retain^t
-          const d = Math.pow(bs.retain, dt);
-          bs.vx  *= d;
-          bs.vy  *= d;
+          // Rolling friction — exponential speed decay each frame.
+          const f = Math.pow(bs.retain, dt);
+          bs.vx *= f;
+          bs.vy *= f;
+
+          // Threshold stop — ball fully halts rather than drifting forever.
+          if (bs.vx * bs.vx + bs.vy * bs.vy < STOP_SPEED * STOP_SPEED) {
+            bs.vx = 0;
+            bs.vy = 0;
+          }
+
+          // Natural pocket capture for all non-winner balls.
+          // Any ball that reaches a pocket opening gets pocketed cleanly,
+          // just as it would on a real table.
+          if (bs.role !== 'winner') {
+            for (const pocket of POCKETS) {
+              const pdx = pocket.x - bs.ball.x;
+              const pdy = pocket.y - bs.ball.y;
+              if (pdx * pdx + pdy * pdy < POCKET_RADIUS * POCKET_RADIUS) {
+                bs.pocketed = true;
+                bs.active   = false;
+                bs.ball.pocket();
+                break;
+              }
+            }
+          }
         }
 
-        // ── Resolve: 0.8 s after winner pockets, settle everything ───────────
-        if (winnerPocketedAt !== null && elapsed - winnerPocketedAt >= 0.80) {
+        // ── Resolve: settle 0.85 s after winner pockets ───────────────────────
+        if (winnerPocketedAt !== null && elapsed - winnerPocketedAt >= 0.85) {
           this.cleanup(states, update, resolve);
           return;
         }
-        // Safety timeout in case something goes wrong
-        if (elapsed >= 6.0) {
+        // Null-winner outcome: resolve after the expected pocket window
+        if (elapsed >= nullWinnerResolveAt) {
+          this.cleanup(states, update, resolve);
+          return;
+        }
+        // Safety timeout
+        if (elapsed >= 6.5) {
           this.cleanup(states, update, resolve);
         }
       };

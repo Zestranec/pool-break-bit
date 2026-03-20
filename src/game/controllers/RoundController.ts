@@ -10,6 +10,7 @@ import { CueBall }    from '../objects/CueBall';
 import { PoolTable }  from '../objects/PoolTable';
 import { Hud }        from '../ui/Hud';
 import { ResultBanner } from '../ui/ResultBanner';
+import { getBetDef, BetKey } from '../config/paytable';
 import { RACK_POSITIONS } from '../config/gameConfig';
 
 function sleep(ms: number): Promise<void> {
@@ -41,8 +42,8 @@ export class RoundController {
   async startRound(): Promise<void> {
     if (!this.sm.canStartRound()) return;
 
-    const { selectedBallId, currentBet } = this.sm.gameState;
-    if (selectedBallId === null) return;
+    const { selectedBetKey, currentBet } = this.sm.gameState;
+    if (selectedBetKey === null) return;
 
     // ── Transition: betting → running ────────────────────────────────────────
     this.sm.transition(GamePhase.RUNNING);
@@ -55,12 +56,15 @@ export class RoundController {
     this.hud.updateBalance();
 
     // ── Resolve outcome BEFORE animation ─────────────────────────────────────
-    const outcome = OutcomeController.resolve(selectedBallId, this.rng);
+    const outcome = OutcomeController.resolve(selectedBetKey, this.rng);
     this.sm.updateState({ lastOutcome: outcome, roundCount: this.sm.gameState.roundCount + 1 });
 
-    // ── Highlight the selected ball on the table ──────────────────────────────
-    const selectedBall = this.balls[selectedBallId - 1];
-    selectedBall.select();
+    // ── Highlight the covered balls on the table ──────────────────────────────
+    const betDef = getBetDef(selectedBetKey as BetKey);
+    this.balls.forEach(b => {
+      if (betDef.coveredResults.includes(b.ballId)) b.select();
+      else                                           b.deselect();
+    });
 
     // ── Play animation ────────────────────────────────────────────────────────
     await this.anim.play(outcome);
@@ -101,7 +105,7 @@ export class RoundController {
     });
 
     this.bet.ensureMinBalance();
-    this.sm.updateState({ selectedBallId: null });
+    this.sm.updateState({ selectedBetKey: null });
 
     await sleep(200);
 

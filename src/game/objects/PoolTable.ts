@@ -104,6 +104,39 @@ export class PoolTable extends Container {
     this.addChild(headLine);
   }
 
+  /**
+   * Brief expanding flash at the rack apex contact point.
+   * Fades from bright warm-white to transparent over ~200 ms, giving
+   * the break a visible impact moment without being cartoonish.
+   */
+  rackImpactFlash(x: number, y: number): void {
+    const flash = new Graphics();
+    this.addChild(flash);
+
+    let elapsed = 0;
+    const DURATION = 200;
+    const R0 = BALL_RADIUS * 0.8;
+    const R1 = BALL_RADIUS * 2.8;
+
+    const ticker = (dt: { deltaMS: number }) => {
+      elapsed += dt.deltaMS;
+      const t = Math.min(elapsed / DURATION, 1);
+      const r = R0 + (R1 - R0) * t;
+      flash.clear();
+      flash.circle(x, y, r);
+      flash.fill({ color: 0xfffbe6, alpha: (1 - t) * 0.80 });
+      // Inner bright core
+      flash.circle(x, y, r * 0.45);
+      flash.fill({ color: 0xffffff, alpha: (1 - t) * 0.55 });
+      if (t >= 1) {
+        this.removeChild(flash);
+        flash.destroy();
+        this.removeTickerListener(ticker);
+      }
+    };
+    this.addTickerListener(ticker);
+  }
+
   /** Flash the pocket glow when a ball is pocketed. */
   flashPocket(pocketId: number): void {
     const flash = this.pocketFlashes.get(pocketId);

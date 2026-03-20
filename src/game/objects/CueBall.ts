@@ -64,30 +64,33 @@ export class CueBall extends Container {
     this.alpha   = 0;
     this.visible = true;
     this.stick.visible = true;
-    this.stick.y = 0; // rest position
+    // Address position: tip held ~14 px back from ball surface so there is
+    // a visible gap before the pullback animation starts.
+    this.stick.y = 14;
 
     return new Promise(resolve => {
       gsap.to(this, { alpha: 1, duration: 0.25, ease: 'power2.out', onComplete: resolve });
     });
   }
 
-  /** Pull stick back, then snap forward. Returns Promise that resolves at snap point. */
+  /** Pull stick back from its current address position, then snap forward. */
   animateStrike(pullBackPx = 22): Promise<void> {
+    const addressY = this.stick.y;  // wherever showAt placed the stick
     return new Promise(resolve => {
       const tl = gsap.timeline({ onComplete: resolve });
-      // Pull back
+      // Pull back (relative to current address position)
       tl.to(this.stick, {
-        y: pullBackPx,
+        y: addressY + pullBackPx,
         duration: 0.35,
         ease: 'power2.out',
       });
-      // Strike (snap forward past neutral)
+      // Strike — tip briefly passes the ball centre (contact point)
       tl.to(this.stick, {
         y: -4,
         duration: 0.16,
         ease: 'power3.in',
       });
-      // Settle
+      // Settle back to neutral
       tl.to(this.stick, {
         y: 0,
         duration: 0.1,
@@ -139,6 +142,7 @@ export class CueBall extends Container {
     gsap.killTweensOf(this.stick);
     this.alpha       = 0;
     this.visible     = false;
+    this.rotation    = 0;
     this.stick.visible = false;
     this.scale.set(1);
     this.stick.y = 0;

@@ -1,5 +1,6 @@
 import { Application, Container } from 'pixi.js';
 import { DESIGN_WIDTH, DESIGN_HEIGHT, RACK_POSITIONS, TABLE } from './config/gameConfig';
+import { generateRack } from './config/rack';
 import { DEFAULT_BET, STARTING_BALANCE } from './config/paytable';
 import { createInitialState } from './state/GameState';
 import { StateMachine }    from './state/StateMachine';
@@ -61,11 +62,15 @@ export class Game {
     const vignette = buildTableVignette();
     this.app.stage.addChild(vignette);
 
-    // Balls (1-8)
+    // Generate a seed-deterministic rack arrangement for this session.
+    // The rack order stays fixed across rounds (balls return to same slots on reset).
+    const rackOrder = generateRack(Math.floor(Math.random() * 0xffffffff));
+
+    // Balls (15 object balls — slot index ↔ ballId set by rack generation)
     const ballLayer = new Container();
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 15; i++) {
       const pos  = RACK_POSITIONS[i];
-      const ball = new BallSprite(i + 1, pos.x, pos.y);
+      const ball = new BallSprite(rackOrder[i], pos.x, pos.y);
       this.balls.push(ball);
       ballLayer.addChild(ball);
     }
@@ -92,21 +97,14 @@ export class Game {
       fn => this.app.ticker.remove(fn),
     );
 
-    // Ball selection
-    this.hud.setOnBallSelect((ballId) => {
-      this.sm.updateState({ selectedBallId: ballId });
-      // Mirror selection on the table balls
-      this.balls.forEach(b => {
-        if (b.ballId === ballId) b.select();
-        else                     b.deselect();
-      });
-      this.hud.selectBall(ballId);
+    // Bet selection (single ball or outside bet)
+    this.hud.setOnBetSelect((betKey) => {
+      this.sm.updateState({ selectedBetKey: betKey });
     });
 
-    // Bet change
+    // Bet amount change
     this.hud.setOnBetChange((amount) => {
       this.bet.setBet(amount as any);
-      this.hud.updateBetHighlight(amount);
     });
 
     // Break button

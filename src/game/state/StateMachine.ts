@@ -39,7 +39,7 @@ export class StateMachine {
   canStartRound(): boolean {
     return (
       this.state.phase === GamePhase.BETTING &&
-      this.state.selectedBallId !== null &&
+      this.state.selectedBetKey !== null &&
       this.state.balance >= this.state.currentBet
     );
   }
