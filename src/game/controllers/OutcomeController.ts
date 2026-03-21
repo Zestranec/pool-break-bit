@@ -1,6 +1,6 @@
 import { RoundOutcome } from '../state/GameState';
 import { ProbabilityController } from './ProbabilityController';
-import { getBetDef, TOTAL_OUTCOMES, BetKey } from '../config/paytable';
+import { getBetDef, TOTAL_OUTCOMES } from '../config/paytable';
 import { SCATTER_PRESETS } from '../config/scatterPresets';
 import { ANIM, POCKETS, FELT, BALL_RADIUS, POCKET_RADIUS } from '../config/gameConfig';
 
@@ -45,12 +45,12 @@ export class OutcomeController {
     rng: ProbabilityController,
   ): RoundOutcome {
     const seed    = rng.getSeed();
-    const betDef  = getBetDef(selectedBetKey as BetKey);
+    const betDef  = getBetDef(selectedBetKey);
 
     // ── 1. Draw outcome (1–17 uniform) ──────────────────────────────────────
     const outcomeResult  = rng.nextInt(TOTAL_OUTCOMES) + 1;  // 1–17
     const winningBallId  = outcomeResult <= 15 ? outcomeResult : null;
-    const isWin          = betDef.coveredResults.includes(outcomeResult);
+    const isWin          = betDef?.balls.includes(outcomeResult) ?? false;
 
     // ── 2. Pick scatter preset ───────────────────────────────────────────────
     const preset = rng.pick(SCATTER_PRESETS);
@@ -103,7 +103,7 @@ export class OutcomeController {
       outcomeResult,
       winningBallId,
       isWin,
-      payoutMultiplier: betDef.payoutMultiplier,
+      payoutMultiplier: betDef?.payoutMultiplier ?? 0,
       cueBallSpawnX:    spawn.x,
       cueBallSpawnY:    spawn.y,
       winningPocketId,

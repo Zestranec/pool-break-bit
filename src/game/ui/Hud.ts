@@ -34,15 +34,15 @@ const ICON_Y  = 12;   // icon centre-y relative to tile (= TILE_H / 2)
 const NUM_X   = 55;   // number text centre-x relative to tile
 
 function displayToBetKey(n: number): BetKey {
-  return n === 0 ? 'cue' : (`ball-${n}` as BetKey);
+  return `ball-${n}` as BetKey;
 }
 
 // ── Outside bets ──────────────────────────────────────────────────────────────
 const OUTSIDE: Array<{ key: BetKey; label: string; sublabel: string }> = [
-  { key: 'low',  label: 'LOW',  sublabel: '1–8'     },
+  { key: 'low',  label: 'LOW',  sublabel: '1–7'     },
   { key: 'odd',  label: 'ODD',  sublabel: '1,3,5…'  },
   { key: 'even', label: 'EVEN', sublabel: '2,4,6…'  },
-  { key: 'high', label: 'HIGH', sublabel: '8–15'    },
+  { key: 'high', label: 'HIGH', sublabel: '9–15'    },
 ];
 const OUTSIDE_BTN_H = 32;
 const OUTSIDE_GAP   = 6;
@@ -215,12 +215,13 @@ export class Hud extends Container {
   }
 
   private buildGrid(): void {
-    for (let n = 0; n <= 15; n++) {
-      const col = n % TILE_COLS;
-      const row = Math.floor(n / TILE_COLS);
-      const tx  = TILE_PAD_X + col * (TILE_W + TILE_GAP);
-      const ty  = HUD.gridY  + row * (TILE_H + TILE_GAP);
-      const key = displayToBetKey(n);
+    for (let n = 1; n <= 15; n++) {
+      const slot = n - 1;  // 0-based slot index
+      const col  = slot % TILE_COLS;
+      const row  = Math.floor(slot / TILE_COLS);
+      const tx   = TILE_PAD_X + col * (TILE_W + TILE_GAP);
+      const ty   = HUD.gridY  + row * (TILE_H + TILE_GAP);
+      const key  = displayToBetKey(n);
 
       const bg = new Graphics();
       this.drawTileBg(bg, n, false);
@@ -232,44 +233,21 @@ export class Hud extends Container {
       this.addChild(bg);
       this.tileBgs.set(key, bg);
 
-      if (n === 0) {
-        // CUE tile: centred label pair
-        const numTxt = new Text({
-          text: '0',
-          style: { fontSize: 10, fontWeight: 'bold', fill: 0xbbbbbb, fontFamily: 'Arial' },
-        });
-        numTxt.anchor.set(0.5);
-        numTxt.x = tx + NUM_X;
-        numTxt.y = ty + ICON_Y - 4;
-        this.addChild(numTxt);
-
-        const cueTxt = new Text({
-          text: 'CUE',
-          style: { fontSize: 7, fill: 0x777777, fontFamily: 'Arial', letterSpacing: 1 },
-        });
-        cueTxt.anchor.set(0.5, 0);
-        cueTxt.x = tx + NUM_X;
-        cueTxt.y = ty + ICON_Y + 3;
-        this.addChild(cueTxt);
-      } else {
-        const isStripe   = n >= 9;
-        const textColor  = n === 8 ? 0xffffff
-                         : isStripe ? 0x222222
-                         : 0xffffff;
-        const numTxt = new Text({
-          text: String(n),
-          style: {
-            fontSize: n >= 10 ? 11 : 13,
-            fontWeight: 'bold',
-            fill: textColor,
-            fontFamily: 'Arial',
-          },
-        });
-        numTxt.anchor.set(0.5);
-        numTxt.x = tx + NUM_X;
-        numTxt.y = ty + ICON_Y;
-        this.addChild(numTxt);
-      }
+      const isStripe  = n >= 9;
+      const textColor = n === 8 ? 0xffffff : isStripe ? 0x222222 : 0xffffff;
+      const numTxt = new Text({
+        text: String(n),
+        style: {
+          fontSize: n >= 10 ? 11 : 13,
+          fontWeight: 'bold',
+          fill: textColor,
+          fontFamily: 'Arial',
+        },
+      });
+      numTxt.anchor.set(0.5);
+      numTxt.x = tx + NUM_X;
+      numTxt.y = ty + ICON_Y;
+      this.addChild(numTxt);
     }
   }
 
@@ -507,7 +485,7 @@ export class Hud extends Container {
       if (bg)  this.drawOutsideBg(bg, k === key);
       if (lbl) lbl.style.fill = k === key ? SEL_BORDER : 0xbbbbbb;
     }
-    for (let n = 0; n <= 15; n++) {
+    for (let n = 1; n <= 15; n++) {
       const k  = displayToBetKey(n);
       const bg = this.tileBgs.get(k);
       if (bg) this.drawTileBg(bg, n, k === key);
@@ -522,7 +500,7 @@ export class Hud extends Container {
       if (bg)  this.drawOutsideBg(bg, false);
       if (lbl) lbl.style.fill = 0xbbbbbb;
     }
-    for (let n = 0; n <= 15; n++) {
+    for (let n = 1; n <= 15; n++) {
       const bg = this.tileBgs.get(displayToBetKey(n));
       if (bg) this.drawTileBg(bg, n, false);
     }

@@ -1,16 +1,18 @@
 import { StateMachine } from '../state/StateMachine';
 import { GamePhase } from '../state/GameState';
 import { BetController } from './BetController';
-import { OutcomeController } from './OutcomeController';
-import { AnimationController } from './AnimationController';
 import { InputController } from './InputController';
 import { ProbabilityController } from './ProbabilityController';
+import { ReplaySelectionPolicy } from './ReplaySelectionPolicy';
+import { ReplayLoader }   from '../replay/ReplayLoader';
+import { ReplaySelector } from '../replay/ReplaySelector';
+import { ReplayPlayer }   from '../replay/ReplayPlayer';
 import { BallSprite } from '../objects/BallSprite';
 import { CueBall }    from '../objects/CueBall';
 import { PoolTable }  from '../objects/PoolTable';
 import { Hud }        from '../ui/Hud';
 import { ResultBanner } from '../ui/ResultBanner';
-import { getBetDef, BetKey } from '../config/paytable';
+import { getBetDef } from '../config/paytable';
 import { RACK_POSITIONS } from '../config/gameConfig';
 
 function sleep(ms: number): Promise<void> {
@@ -20,8 +22,11 @@ function sleep(ms: number): Promise<void> {
 type TickerFn = (dt: { deltaMS: number }) => void;
 
 export class RoundController {
-  private anim: AnimationController;
-  private rng   = ProbabilityController.fresh();
+  private policy   = new ReplaySelectionPolicy();
+  private loader   = new ReplayLoader('/data');
+  private selector = new ReplaySelector();
+  private player:  ReplayPlayer;
+  private _rng     = ProbabilityController.fresh(); // kept for any future use
 
   constructor(
     private sm:          StateMachine,
@@ -35,7 +40,7 @@ export class RoundController {
     tickerAdd:           (fn: TickerFn) => void,
     tickerRemove:        (fn: TickerFn) => void,
   ) {
-    this.anim = new AnimationController(balls, cueBall, table, tickerAdd, tickerRemove);
+    this.player = new ReplayPlayer(tickerAdd, tickerRemove);
   }
 
   /** Called when player hits BREAK. */
@@ -55,28 +60,42 @@ export class RoundController {
     this.bet.placeBet();
     this.hud.updateBalance();
 
-    // ── Resolve outcome BEFORE animation ─────────────────────────────────────
-    const outcome = OutcomeController.resolve(selectedBetKey, this.rng);
-    this.sm.updateState({ lastOutcome: outcome, roundCount: this.sm.gameState.roundCount + 1 });
+    // ── Draw winning ball via selection policy ────────────────────────────────
+    const winnerBallId = this.policy.drawWinner(selectedBetKey);
 
-    // ── Highlight the covered balls on the table ──────────────────────────────
-    const betDef = getBetDef(selectedBetKey as BetKey);
+    // ── Select and load the matching replay ───────────────────────────────────
+    const index     = await this.loader.loadIndex();
+    const fileName  = this.selector.pick(winnerBallId, index);
+    const roundData = await this.loader.loadRound(fileName);
+
+    // ── Remap ball sprites to match this replay's ball config ─────────────────
+    // roundData.bc[slot] = ballId assigned to rack slot in the recorded round.
+    for (let slot = 0; slot < 15; slot++) {
+      this.balls[slot].assignBall(roundData.bc[slot]);
+    }
+
+    // ── Highlight covered balls ───────────────────────────────────────────────
+    const betDef = getBetDef(selectedBetKey);
     this.balls.forEach(b => {
-      if (betDef.coveredResults.includes(b.ballId)) b.select();
-      else                                           b.deselect();
+      if (betDef && betDef.balls.includes(b.ballId)) b.select();
+      else                                            b.deselect();
     });
 
-    // ── Play animation ────────────────────────────────────────────────────────
-    await this.anim.play(outcome);
+    // ── Play the replay ───────────────────────────────────────────────────────
+    await this.player.play(roundData, this.balls, this.cueBall, this.table);
 
     // ── Small dramatic pause ──────────────────────────────────────────────────
     await sleep(350);
 
-    // ── Resolve ───────────────────────────────────────────────────────────────
+    // ── Resolve outcome ───────────────────────────────────────────────────────
     this.sm.transition(GamePhase.RESOLVE);
+    const { won, payout } = this.policy.resolveOutcome(
+      winnerBallId, selectedBetKey, currentBet,
+    );
 
-    if (outcome.isWin) {
-      const winAmount = this.bet.awardWin(outcome.payoutMultiplier);
+    if (won) {
+      const multiplier = payout / currentBet; // reconstruct for BetController
+      const winAmount  = this.bet.awardWin(multiplier);
       this.hud.updateBalance();
       this.hud.showWin(winAmount);
       this.sm.transition(GamePhase.WIN);
@@ -94,12 +113,9 @@ export class RoundController {
 
   private async reset(): Promise<void> {
     this.sm.transition(GamePhase.RESET);
-    this.anim.killAll();
-
-    this.banner.hide();
     this.cueBall.reset();
 
-    // Return all balls to rack positions
+    // Return all balls to rack positions (ball IDs stay as last assigned)
     this.balls.forEach((ball, i) => {
       ball.resetForNewRound(RACK_POSITIONS[i].x, RACK_POSITIONS[i].y);
     });

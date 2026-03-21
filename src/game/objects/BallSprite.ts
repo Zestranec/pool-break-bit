@@ -4,7 +4,8 @@ import { getBallDef, BallDef } from '../config/balls';
 import { gsap } from 'gsap';
 
 export class BallSprite extends Container {
-  readonly ballId:  number;    // 1-indexed
+  private _ballId:  number;    // 1-indexed
+  get ballId(): number { return this._ballId; }
   private def:      BallDef;
 
   private body:     Graphics;
@@ -17,8 +18,8 @@ export class BallSprite extends Container {
 
   constructor(ballId: number, x: number, y: number) {
     super();
-    this.ballId = ballId;
-    this.def    = getBallDef(ballId);
+    this._ballId = ballId;
+    this.def     = getBallDef(ballId);
     this.position.set(x, y);
 
     // ── Glow ring (shown when selected) ──────────────────────────────────────
@@ -59,6 +60,18 @@ export class BallSprite extends Container {
     // ── Interactivity ─────────────────────────────────────────────────────────
     this.eventMode = 'static';
     this.cursor    = 'pointer';
+  }
+
+  /**
+   * Reassign this sprite to a different ball ID.
+   * Updates both the visual appearance and the ballId used for win checks.
+   * Call before each round starts (replay ball config can differ per round).
+   */
+  assignBall(id: number): void {
+    this._ballId      = id;
+    this.def          = getBallDef(id);
+    this.labelText.text = String(id);
+    this.drawBody();
   }
 
   // ─── Drawing ────────────────────────────────────────────────────────────────

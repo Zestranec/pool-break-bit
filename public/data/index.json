@@ -1,0 +1,752 @@
+[
+  {
+    "file": "round_00000.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00001.json",
+    "firstBall": 7,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00002.json",
+    "firstBall": 2,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00003.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00004.json",
+    "firstBall": 10,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00005.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00006.json",
+    "firstBall": 2,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00007.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00008.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00009.json",
+    "firstBall": 1,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00010.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00011.json",
+    "firstBall": 13,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00012.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00013.json",
+    "firstBall": 1,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00014.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00015.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00016.json",
+    "firstBall": 15,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00017.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00018.json",
+    "firstBall": 5,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00019.json",
+    "firstBall": 5,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00020.json",
+    "firstBall": 5,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00021.json",
+    "firstBall": 12,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00022.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00023.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00024.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00025.json",
+    "firstBall": 15,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00026.json",
+    "firstBall": 3,
+    "firstPock": 0
+  },
+  {
+    "file": "round_00027.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00028.json",
+    "firstBall": 1,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00029.json",
+    "firstBall": 15,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00030.json",
+    "firstBall": 5,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00031.json",
+    "firstBall": 10,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00032.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00033.json",
+    "firstBall": 9,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00034.json",
+    "firstBall": 12,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00035.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00036.json",
+    "firstBall": 7,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00037.json",
+    "firstBall": 7,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00038.json",
+    "firstBall": 2,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00039.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00040.json",
+    "firstBall": 4,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00041.json",
+    "firstBall": 6,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00042.json",
+    "firstBall": 13,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00043.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00044.json",
+    "firstBall": 2,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00045.json",
+    "firstBall": 12,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00046.json",
+    "firstBall": 4,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00047.json",
+    "firstBall": 1,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00048.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00049.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00050.json",
+    "firstBall": 13,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00051.json",
+    "firstBall": 10,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00052.json",
+    "firstBall": 1,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00053.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00054.json",
+    "firstBall": 2,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00055.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00056.json",
+    "firstBall": 9,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00057.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00058.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00059.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00060.json",
+    "firstBall": 6,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00061.json",
+    "firstBall": 10,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00062.json",
+    "firstBall": 6,
+    "firstPock": 0
+  },
+  {
+    "file": "round_00063.json",
+    "firstBall": 7,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00064.json",
+    "firstBall": 2,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00065.json",
+    "firstBall": 9,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00066.json",
+    "firstBall": 9,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00067.json",
+    "firstBall": 12,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00068.json",
+    "firstBall": 13,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00069.json",
+    "firstBall": 13,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00070.json",
+    "firstBall": 15,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00071.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00072.json",
+    "firstBall": 2,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00073.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00074.json",
+    "firstBall": 1,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00075.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00076.json",
+    "firstBall": 6,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00077.json",
+    "firstBall": 2,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00078.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00079.json",
+    "firstBall": 13,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00080.json",
+    "firstBall": 15,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00081.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00082.json",
+    "firstBall": 9,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00083.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00084.json",
+    "firstBall": 1,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00085.json",
+    "firstBall": 13,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00086.json",
+    "firstBall": 9,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00087.json",
+    "firstBall": 10,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00088.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00089.json",
+    "firstBall": 15,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00090.json",
+    "firstBall": 13,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00091.json",
+    "firstBall": 10,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00092.json",
+    "firstBall": 5,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00093.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00094.json",
+    "firstBall": 12,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00095.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00096.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00097.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00098.json",
+    "firstBall": 7,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00099.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00100.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00101.json",
+    "firstBall": 10,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00102.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00103.json",
+    "firstBall": 4,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00104.json",
+    "firstBall": 2,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00105.json",
+    "firstBall": 6,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00106.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00107.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00108.json",
+    "firstBall": 12,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00109.json",
+    "firstBall": 12,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00110.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00111.json",
+    "firstBall": 13,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00112.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00113.json",
+    "firstBall": 4,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00114.json",
+    "firstBall": 13,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00115.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00116.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00117.json",
+    "firstBall": 13,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00118.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00119.json",
+    "firstBall": 9,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00120.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00121.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00122.json",
+    "firstBall": 6,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00123.json",
+    "firstBall": 15,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00124.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00125.json",
+    "firstBall": 12,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00126.json",
+    "firstBall": 15,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00127.json",
+    "firstBall": 6,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00128.json",
+    "firstBall": 1,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00129.json",
+    "firstBall": 12,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00130.json",
+    "firstBall": 7,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00131.json",
+    "firstBall": 11,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00132.json",
+    "firstBall": 14,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00133.json",
+    "firstBall": 4,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00134.json",
+    "firstBall": 2,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00135.json",
+    "firstBall": 12,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00136.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00137.json",
+    "firstBall": 12,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00138.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00139.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00140.json",
+    "firstBall": 7,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00141.json",
+    "firstBall": 7,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00142.json",
+    "firstBall": 5,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00143.json",
+    "firstBall": 9,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00144.json",
+    "firstBall": 2,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00145.json",
+    "firstBall": 3,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00146.json",
+    "firstBall": 8,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00147.json",
+    "firstBall": 7,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00148.json",
+    "firstBall": 12,
+    "firstPock": 4
+  },
+  {
+    "file": "round_00149.json",
+    "firstBall": 10,
+    "firstPock": 4
+  }
+]
