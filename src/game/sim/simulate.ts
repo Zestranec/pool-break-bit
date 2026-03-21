@@ -2,26 +2,30 @@
  * RTP Simulation — run with:  npm run sim
  *
  * Verifies hit rate and simulated RTP for all supported bet types
- * against the 15-outcome model at 95 % target RTP.
+ * against the 16-outcome model at 95 % target RTP.
  *
- *   Outcome space: 15 equal-probability results (1/15 each)
+ *   Outcome space: 16 equal-probability results (1/16 each)
+ *     0     = cue ball / zero
+ *     1–15  = numbered balls
  *
  *   Expected total-return multipliers:
- *     Single (1 covered) :  15/1  × 0.95 = 14.25     hit = 1/15 ≈  6.67 %
- *     Low / High         :  15/7  × 0.95 ≈ 2.036      hit = 7/15 ≈ 46.67 %
- *     Odd (8 covered)    :  15/8  × 0.95 = 1.78125    hit = 8/15 ≈ 53.33 %
- *     Even (7 covered)   :  15/7  × 0.95 ≈ 2.036      hit = 7/15 ≈ 46.67 %
+ *     Single 0 or 1–15  :  16/1  × 0.95 = 15.2       hit = 1/16  =  6.25 %
+ *     Low  (1–8)        :  16/8  × 0.95 = 1.9         hit = 8/16  = 50.00 %
+ *     High (8–15)       :  16/8  × 0.95 = 1.9         hit = 8/16  = 50.00 %
+ *     Odd  (8 covered)  :  16/8  × 0.95 = 1.9         hit = 8/16  = 50.00 %
+ *     Even (7 covered)  :  16/7  × 0.95 ≈ 2.1714      hit = 7/16  = 43.75 %
  */
 
 import { BET_DEFS, BetKey, TOTAL_OUTCOMES } from '../config/paytable';
 import { ReplaySelectionPolicy } from '../controllers/ReplaySelectionPolicy';
 
 const ROUNDS_PER_BET = 1_000_000;
-const BET            = 1;
+const BET            = 100;  // use realistic bet size; floor() precision loss is negligible
 const TOLERANCE      = 0.010; // ±1.0 %
 
 const BET_KEYS_TO_TEST: BetKey[] = [
-  'ball-1',   // single ball
+  'ball-0',   // single cue ball (zero)
+  'ball-1',   // single numbered ball
   'low',
   'high',
   'odd',
@@ -69,7 +73,7 @@ function simulate(key: BetKey): SimResult {
 // ── Run ───────────────────────────────────────────────────────────────────────
 
 console.log('──────────────────────────────────────────────────────────');
-console.log('  Pool Break Bet — RTP Simulation  (15-outcome model)');
+console.log('  Pool Break Bet — RTP Simulation  (16-outcome model)');
 console.log('──────────────────────────────────────────────────────────');
 console.log(`  Rounds per bet type : ${ROUNDS_PER_BET.toLocaleString()}`);
 console.log('──────────────────────────────────────────────────────────');

@@ -2,10 +2,13 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { DESIGN_WIDTH, TABLE } from '../config/gameConfig';
 import { gsap } from 'gsap';
 
+const AUTO_HIDE_MS = 3000;
+
 export class ResultBanner extends Container {
   private bg:        Graphics;
   private mainText:  Text;
   private subText:   Text;
+  private _hideTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     super();
@@ -94,18 +97,38 @@ export class ResultBanner extends Container {
   }
 
   private _show(): void {
+    // Cancel any pending auto-hide from a previous result.
+    this._clearTimer();
+
     this.visible = true;
     this.scale.set(0.6);
+    gsap.killTweensOf(this);
+    gsap.killTweensOf(this.scale);
     gsap.to(this,       { alpha: 1,  duration: 0.3, ease: 'power2.out' });
     gsap.to(this.scale, { x: 1, y: 1, duration: 0.35, ease: 'back.out(2)' });
+
+    // Auto-hide after 3 s so the table is clean before the next round.
+    this._hideTimer = setTimeout(() => {
+      this._hideTimer = null;
+      this.hide();
+    }, AUTO_HIDE_MS);
   }
 
   hide(): void {
+    this._clearTimer();
+    gsap.killTweensOf(this);
     gsap.to(this, {
       alpha: 0,
       duration: 0.22,
       ease: 'power2.in',
       onComplete: () => { this.visible = false; },
     });
+  }
+
+  private _clearTimer(): void {
+    if (this._hideTimer !== null) {
+      clearTimeout(this._hideTimer);
+      this._hideTimer = null;
+    }
   }
 }

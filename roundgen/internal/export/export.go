@@ -16,14 +16,17 @@ import (
 // The Samples field is a flat [][]float64 to keep the file compact
 // (a full round with 300 samples × 33 fields ≈ 10 000 numbers).
 type RoundJSON struct {
-	Seed      int64          `json:"seed"`
-	BC        [15]int        `json:"bc"`  // ballConfig: rack slot → ball ID
-	CueX      float64        `json:"cueX"`
-	CueY      float64        `json:"cueY"`
-	Samples   [][]float64    `json:"s"`   // each inner slice has SampleStride entries
-	PE        []PocketEventJ `json:"pe"`
-	FirstBall int            `json:"firstBall"` // -1 if none
-	FirstPock int            `json:"firstPock"` // -1 if none
+	Seed         int64          `json:"seed"`
+	BC           [15]int        `json:"bc"`        // ballConfig: rack slot → ball ID
+	CueX         float64        `json:"cueX"`
+	CueY         float64        `json:"cueY"`
+	BreakPresetID int           `json:"bpid"`      // BreakPreset.ID (0–6)
+	BreakTargetX float64        `json:"btx"`       // actual aim point X (preset + jitter)
+	BreakTargetY float64        `json:"bty"`       // actual aim point Y
+	Samples      [][]float64    `json:"s"`         // each inner slice has SampleStride entries
+	PE           []PocketEventJ `json:"pe"`
+	FirstBall    int            `json:"firstBall"` // -1 if none, 0 = cue only
+	FirstPock    int            `json:"firstPock"` // -1 if none
 }
 
 // PocketEventJ is the JSON form of model.PocketEvent.
@@ -44,14 +47,17 @@ func MarshalRound(r model.Round) RoundJSON {
 		samples[i] = []float64(s)
 	}
 	return RoundJSON{
-		Seed:      r.Seed,
-		BC:        r.BallConfig,
-		CueX:      r.CueBallSpawnX,
-		CueY:      r.CueBallSpawnY,
-		Samples:   samples,
-		PE:        pe,
-		FirstBall: r.FirstPocketedBallID,
-		FirstPock: r.FirstPocketedPocketID,
+		Seed:          r.Seed,
+		BC:            r.BallConfig,
+		CueX:          r.CueBallSpawnX,
+		CueY:          r.CueBallSpawnY,
+		BreakPresetID: r.BreakTargetPresetID,
+		BreakTargetX:  r.BreakTargetX,
+		BreakTargetY:  r.BreakTargetY,
+		Samples:       samples,
+		PE:            pe,
+		FirstBall:     r.FirstPocketedBallID,
+		FirstPock:     r.FirstPocketedPocketID,
 	}
 }
 
@@ -78,9 +84,11 @@ func WriteRoundToFile(path string, r model.Round) error {
 
 // IndexEntry is one line in the dataset index file (public/data/index.json).
 type IndexEntry struct {
-	File      string `json:"file"`
-	FirstBall int    `json:"firstBall"` // -1 = no ball pocketed, 0 = cue only
-	FirstPock int    `json:"firstPock"`
+	File          string `json:"file"`
+	FirstBall     int    `json:"firstBall"`  // -1 = no ball pocketed, 0 = cue only
+	FirstPock     int    `json:"firstPock"`
+	BreakPresetID int    `json:"bpid"`       // which break-target preset was used (0–6)
+	CueRegion     int    `json:"cueRegion"`  // cue spawn region: 0=left, 1=center, 2=right
 }
 
 // WriteIndex writes the dataset index as a JSON array to path.

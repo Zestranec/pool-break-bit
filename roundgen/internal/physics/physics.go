@@ -14,9 +14,10 @@ import (
 
 const (
 	dt              = 1.0 / 60.0 // seconds per frame
-	rollingRetain   = 0.38       // speed fraction surviving 1 s of felt friction
+	rollingRetain   = 0.58       // speed fraction surviving 1 s of felt friction
+	                             // (raised from 0.38 → balls travel farther, more pocket variety)
 	winnerRetain    = rollingRetain
-	railRetention   = 0.65 // energy kept after cushion bounce
+	railRetention   = 0.72 // energy kept after cushion bounce (raised from 0.65)
 	ballRestitution = 0.87 // coefficient of restitution, ball-ball
 	stopSpeed       = 5.0  // px/s threshold — ball halts completely below this
 )
@@ -30,14 +31,15 @@ const maxFrames = 600
 // ── Cue-ball launch parameters ────────────────────────────────────────────────
 
 const (
-	// cueBallSpawnY is the Y co-ordinate used for the break shot.
-	// Placed at 68 % of felt height from the top — lower third of the table.
-	cueBallSpawnY = model.FeltTop + (model.FeltBottom-model.FeltTop)*0.68
+	// cueBallBaseY is the base Y for cue-ball spawn (68 % from felt top).
+	cueBallBaseY = model.FeltTop + (model.FeltBottom-model.FeltTop)*0.68
 
-	// Launch speed in px/s — realistic break shot energy.
-	// Must be high enough that after elastic energy distribution across 15
-	// tightly-packed rack balls, the corner/edge balls still reach the pockets.
+	// launchSpeed in px/s — realistic break shot energy.
 	launchSpeed = 900.0
+
+	// breakTargetJitter is the maximum ±px of random noise added to the
+	// selected break-target preset, in both X and Y.
+	breakTargetJitter = 2.5
 )
 
 // ── RNG helpers ───────────────────────────────────────────────────────────────
@@ -60,12 +62,14 @@ func Simulate(seed int64, ballConfig [15]int) model.Round {
 	// ── Initial positions ──────────────────────────────────────────────────────
 	balls := make([]model.Ball, 16) // index 0=cue, 1–15=object balls
 
-	// Cue ball — random X within the middle third of the felt.
+	// ── Cue ball spawn ────────────────────────────────────────────────────────
+	// X spans the middle 50 % of the felt (25 %–75 %) for realistic head-string placement.
+	// Y varies ±20 px around the base position for additional shot-angle diversity.
 	cueX := rng.rangeF(
-		model.FeltLeft+(model.FeltRight-model.FeltLeft)*0.3,
-		model.FeltLeft+(model.FeltRight-model.FeltLeft)*0.7,
+		model.FeltLeft+(model.FeltRight-model.FeltLeft)*0.25,
+		model.FeltLeft+(model.FeltRight-model.FeltLeft)*0.75,
 	)
-	cueY := cueBallSpawnY
+	cueY := rng.rangeF(cueBallBaseY-20, cueBallBaseY+20)
 
 	balls[0] = model.Ball{ID: 0, X: cueX, Y: cueY, PocketID: -1}
 
@@ -80,20 +84,23 @@ func Simulate(seed int64, ballConfig [15]int) model.Round {
 		}
 	}
 
-	// Cue velocity: aimed straight at the rack apex (slot 0) with slight jitter.
-	apexX, apexY := model.RackSlot(0)
-	aimDX := apexX - cueX
-	aimDY := apexY - cueY
+	// ── Break target selection ────────────────────────────────────────────────
+	// Choose one of 7 physically realistic rack-impact presets, then add a
+	// small deterministic jitter so even rounds with the same preset differ.
+	presetIdx := rng.r.Intn(len(model.BreakPresets))
+	preset := model.BreakPresets[presetIdx]
+	targetX := preset.X + rng.rangeF(-breakTargetJitter, breakTargetJitter)
+	targetY := preset.Y + rng.rangeF(-breakTargetJitter, breakTargetJitter)
+
+	// Compute normalised strike direction from cue spawn → break target.
+	aimDX := targetX - cueX
+	aimDY := targetY - cueY
 	aimLen := math.Sqrt(aimDX*aimDX + aimDY*aimDY)
 	aimDX /= aimLen
 	aimDY /= aimLen
 
-	// ±3° of launch angle jitter.
-	jitterRad := rng.rangeF(-0.052, 0.052)
-	cosJ := math.Cos(jitterRad)
-	sinJ := math.Sin(jitterRad)
-	balls[0].VX = (aimDX*cosJ - aimDY*sinJ) * launchSpeed
-	balls[0].VY = (aimDX*sinJ + aimDY*cosJ) * launchSpeed
+	balls[0].VX = aimDX * launchSpeed
+	balls[0].VY = aimDY * launchSpeed
 
 	// Per-ball friction retain value.
 	retain := make([]float64, 16)
@@ -229,7 +236,10 @@ func Simulate(seed int64, ballConfig [15]int) model.Round {
 	return model.Round{
 		BallConfig:            ballConfig,
 		CueBallSpawnX:         cueX,
-		CueBallSpawnY:         cueBallSpawnY,
+		CueBallSpawnY:         cueY,
+		BreakTargetPresetID:   preset.ID,
+		BreakTargetX:          targetX,
+		BreakTargetY:          targetY,
 		Samples:               samples,
 		PocketEvents:          pocketEvents,
 		FirstPocketedBallID:   firstBallID,

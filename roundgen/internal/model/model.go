@@ -115,6 +115,37 @@ const SampleStride = 33 // 2 fields per ball (15) + cue (2) + time (1) = 33
 
 type Sample []float64 // length SampleStride
 
+// ── Break target presets ──────────────────────────────────────────────────────
+
+// BreakPreset is one named, physically realistic rack-impact point.
+// All coordinates are in the same space as RackSlot() output.
+//
+// The seven presets span the realistic break-shot range:
+//   from a full left-cluster hit (slot 1 direct) through center-apex
+//   to a full right-cluster hit (slot 2 direct).
+//
+// Rack reference points (portrait orientation, apex nearest cue / high Y):
+//   Apex  (slot 0): (200, 168)
+//   Slot1 (slot 1): (189, 149)   left-front
+//   Slot2 (slot 2): (211, 149)   right-front
+type BreakPreset struct {
+	ID   int
+	Name string
+	X    float64 // table-space target X
+	Y    float64 // table-space target Y
+}
+
+// BreakPresets lists all legal break-target presets in order of ID.
+var BreakPresets = [7]BreakPreset{
+	{0, "apex-center",   200.0, 168.0}, // dead center on apex ball
+	{1, "apex-left",     196.5, 168.0}, // ~quarter-ball left of apex center
+	{2, "apex-right",    203.5, 168.0}, // ~quarter-ball right of apex center
+	{3, "seam-left",     193.0, 164.0}, // left edge of apex ball (half-ball contact)
+	{4, "seam-right",    207.0, 164.0}, // right edge of apex ball (half-ball contact)
+	{5, "deep-left",     191.0, 161.0}, // deep left contact: more energy to right side
+	{6, "deep-right",    209.0, 161.0}, // deep right contact: more energy to left side
+}
+
 // ── Round record ─────────────────────────────────────────────────────────────
 
 // Round is the complete record of one simulated break, ready for export.
@@ -126,6 +157,12 @@ type Round struct {
 	// CueBallSpawnX/Y is where the cue ball starts.
 	CueBallSpawnX float64
 	CueBallSpawnY float64
+
+	// BreakTargetPresetID identifies which BreakPreset was chosen.
+	BreakTargetPresetID int
+	// BreakTargetX/Y is the actual aim point (preset + jitter).
+	BreakTargetX float64
+	BreakTargetY float64
 
 	// Samples holds the position snapshots (every 2 physics frames ≈ 33 ms).
 	Samples []Sample

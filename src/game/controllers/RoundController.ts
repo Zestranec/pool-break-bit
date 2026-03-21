@@ -113,6 +113,8 @@ export class RoundController {
 
   private async reset(): Promise<void> {
     this.sm.transition(GamePhase.RESET);
+    // Cancel any pending auto-hide timer and hide immediately.
+    this.banner.hide();
     this.cueBall.reset();
 
     // Return all balls to rack positions (ball IDs stay as last assigned)

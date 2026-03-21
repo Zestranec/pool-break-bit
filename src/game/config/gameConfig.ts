@@ -1,6 +1,6 @@
 // ─── Canvas / design space ─────────────────────────────────────────────────
 export const DESIGN_WIDTH  = 400;
-export const DESIGN_HEIGHT = 750;   // tall enough for portrait table + compact HUD
+export const DESIGN_HEIGHT = 875;   // tall enough for portrait table + HUD with cue-ball tile
 
 // ─── Pool table outer frame ──────────────────────────────────────────────────
 // Portrait layout — long axis runs top→bottom on screen.
@@ -101,34 +101,23 @@ export const RACK_POSITIONS: Array<{ x: number; y: number }> = [
 export const BALL_COUNT = 15;
 
 // ─── HUD layout ───────────────────────────────────────────────────────────────
-// Panel starts at TABLE.height + 10 px = 510.
-// Available height: DESIGN_HEIGHT(750) − 510 = 240 px.
-//
-// Vertical stack:
-//   +0   separator (2 px)
-//   +3   balance row  (label 13 px + value 22 px ≈ 38 px total → ends ~551)
-//   +41  outside bet row: LOW | ODD | EVEN | HIGH  (32 px → ends ~583)
-//   +76  bet summary line (13 px → ends ~596)
-//   +89  4×4 single-ball grid (4 × 24 px + 3 × 3 px = 105 px → ends ~705)
-//   +198 action row: [−] [bet] [+] [BREAK]  (36 px → ends ~748)
-//   +234 bottom (236 px < 240 ✓)
-// ─── HUD layout ───────────────────────────────────────────────────────────────
-// Panel starts at TABLE.height + 10 = 510.  Available: 750 − 510 = 240 px.
+// Panel starts at TABLE.height + 10 = 510.  Available: 875 − 510 = 365 px.
 //
 //   510  separator
-//   513  BALANCE / WIN row                              (≈ 35 px)
-//   548  "GROUP BETS" label                            ( 10 px)
-//   558  [LOW] [ODD] [EVEN] [HIGH]   h=32             ( 32 px)
-//   590  "SINGLE BALL" label                           ( 10 px)
-//   600  4×4 ball grid  4×24 + 3×3                    (105 px → bottom 705)
-//   709  [−] [$] [+] [BREAK]         h=36             ( 36 px → bottom 745)
+//   514  BALANCE / WIN row                              (≈ 38 px)
+//   562  "GROUP BETS" label                            ( 11 px + 7 gap)
+//   580  [LOW] [ODD] [EVEN] [HIGH]   h=44             ( 44 px → bottom 624)
+//   634  "SINGLE BALL" label                           ( 11 px + 6 gap)
+//   651  cue-ball (0) tile            h=36             ( 36 px → bottom 687)
+//   695  5×3 ball grid  3×36 + 2×6                    (120 px → bottom 815)
+//   825  [−] [$] [+] [BREAK]         h=44             ( 44 px → bottom 869 < 875 ✓)
 export const HUD = {
   topY:          510,
-  balanceY:      513,
-  outsideBetsY:  558,   // top of outside-bet buttons (h=32 → bottom 590)
-  summaryY:      590,   // "SINGLE BALL" label (used as section-label Y)
-  gridY:         602,   // top of 4×4 ball grid (4×24+3×3=105 → bottom 707)
-  actionRowY:    709,   // action row (h=36 → bottom 745 < 750 ✓)
+  balanceY:      514,
+  outsideBetsY:  580,   // top of outside-bet buttons (h=44 → bottom 624)
+  summaryY:      634,   // "SINGLE BALL" label
+  gridY:         651,   // top of cue-ball tile (h=36 → bottom 687)
+  actionRowY:    825,   // action row (h=44 → bottom 869 < 875 ✓)
 } as const;
 
 // ─── Animation timing (seconds unless noted) ────────────────────────────────

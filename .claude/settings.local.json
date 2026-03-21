@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(go build:*)",
-      "Bash(go run:*)"
+      "Bash(go run:*)",
+      "Bash(find c:Usersiharbpool-break-bit -name *.css -not -path */node_modules/*)",
+      "Bash(node -e \":*)",
+      "Bash(rm -f public/data/rounds/*.json public/data/index.json)",
+      "Bash(./roundgen/roundgen -n 160 -out public/data -stats -attempts 50)",
+      "Bash(./roundgen/roundgen -n 160 -out public/data -stats -attempts 80)",
+      "Bash(python -c \":*)",
+      "Bash(./roundgen/roundgen -n 160 -out public/data -attempts 80)",
+      "Bash(python -c \"import json; d=json.load\\(open\\(''public/data/index.json''\\)\\); print\\(json.dumps\\(d[0], indent=2\\)\\); print\\(''cueRegion values:'', set\\(e[''cueRegion''] for e in d\\)\\)\")"
     ]
   }
 }

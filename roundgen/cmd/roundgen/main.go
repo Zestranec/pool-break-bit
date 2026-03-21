@@ -13,7 +13,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/pool-break-bit/roundgen/internal/export"
 	"github.com/pool-break-bit/roundgen/internal/physics"
@@ -21,13 +20,23 @@ import (
 	"github.com/pool-break-bit/roundgen/internal/stats"
 )
 
+// maxPatternCount: maximum times the same (firstBall, firstPocket) pair
+// may appear in the accepted dataset.  Rounds exceeding this limit are
+// rejected so no single ball→pocket pattern dominates the replay library.
+const maxPatternCount = 5
+
+// maxCueFirst: maximum cue-first (outcome 0) rounds accepted.
+// Cue-first rounds have firstPock=-1 so they bypass the pattern filter;
+// this separate cap prevents them from overwhelming the dataset.
+const maxCueFirst = 12
+
 func main() {
 	n := flag.Int("n", 100, "number of quality rounds to produce")
 	outDir := flag.String("out", "public/data", "output directory for round files and index.json")
 	seed := flag.Int64("seed", 0, "base seed (0 = random)")
 	stdout := flag.Bool("stdout", false, "write a single round to stdout instead of files")
 	showStats := flag.Bool("stats", false, "print distribution statistics after generation")
-	maxAttempts := flag.Int("attempts", 20, "max simulation attempts per accepted round")
+	maxAttempts := flag.Int("attempts", 30, "max simulation attempts per accepted round")
 	flag.Parse()
 
 	baseSeed := *seed
@@ -48,11 +57,17 @@ func main() {
 
 	// ── Batch generation mode ─────────────────────────────────────────────────
 	var (
-		entries []export.IndexEntry
-		sc      stats.OutcomeCount
-		attempt int64
+		entries  []export.IndexEntry
+		sc       stats.DatasetStats
+		attempt  int64
 		accepted int
 	)
+
+	// patternCount tracks how many accepted rounds have the same
+	// (firstBall, firstPocket) outcome pair, to enforce diversity.
+	type patternKey struct{ ball, pocket int }
+	patternCount := make(map[patternKey]int)
+	cueFirstCount := 0
 
 	fmt.Printf("Generating %d quality rounds (seed base %d)…\n", *n, baseSeed)
 
@@ -71,6 +86,24 @@ func main() {
 			continue
 		}
 
+		// ── Diversity filter ──────────────────────────────────────────────────
+		// Reject rounds that would push any (ball, pocket) pair above the cap.
+		// Only applies once we have enough accepted rounds to judge diversity.
+		if r.FirstPocketedBallID == 0 {
+			// Cue-first rounds bypass the ball→pocket pattern filter because
+			// firstPock is -1. Enforce a separate absolute cap instead.
+			if cueFirstCount >= maxCueFirst {
+				continue
+			}
+			cueFirstCount++
+		} else if r.FirstPocketedBallID >= 1 && r.FirstPocketedPocketID >= 0 {
+			pk := patternKey{r.FirstPocketedBallID, r.FirstPocketedPocketID}
+			if accepted >= *n/4 && patternCount[pk] >= maxPatternCount {
+				continue
+			}
+			patternCount[pk]++
+		}
+
 		// Write to rounds/ subdirectory.
 		fileName := fmt.Sprintf("round_%05d.json", accepted)
 		path := filepath.Join(*outDir, "rounds", fileName)
@@ -80,11 +113,13 @@ func main() {
 		}
 
 		entries = append(entries, export.IndexEntry{
-			File:      fileName,
-			FirstBall: r.FirstPocketedBallID,
-			FirstPock: r.FirstPocketedPocketID,
+			File:          fileName,
+			FirstBall:     r.FirstPocketedBallID,
+			FirstPock:     r.FirstPocketedPocketID,
+			BreakPresetID: r.BreakTargetPresetID,
+			CueRegion:     cueRegion(r.CueBallSpawnX),
 		})
-		sc.Record(r.FirstPocketedBallID)
+		sc.Record(r)
 		accepted++
 
 		if accepted%50 == 0 || accepted == *n {
@@ -114,6 +149,27 @@ func defaultBallConfig() [15]int {
 	return bc
 }
 
+// cueRegion buckets a cue-ball X position into thirds of the felt:
+//
+//	0 = left   (FeltLeft … FeltLeft+FeltWidth/3)
+//	1 = center (FeltLeft+FeltWidth/3 … FeltLeft+2×FeltWidth/3)
+//	2 = right  (FeltLeft+2×FeltWidth/3 … FeltRight)
+func cueRegion(x float64) int {
+	const (
+		feltLeft  = 24.0
+		feltRight = 376.0
+		third     = (feltRight - feltLeft) / 3.0 // ≈ 117.3
+	)
+	switch {
+	case x < feltLeft+third:
+		return 0
+	case x < feltLeft+2*third:
+		return 1
+	default:
+		return 2
+	}
+}
+
 // shuffleBalls returns a seeded Fisher-Yates shuffle of balls 1–15.
 func shuffleBalls(seed int64) [15]int {
 	bc := defaultBallConfig()
@@ -123,9 +179,4 @@ func shuffleBalls(seed int64) [15]int {
 		bc[i], bc[j] = bc[j], bc[i]
 	}
 	return bc
-}
-
-// seedStr is a helper used in filenames (unused directly but available).
-func seedStr(seed int64) string {
-	return strconv.FormatInt(seed, 16)
 }

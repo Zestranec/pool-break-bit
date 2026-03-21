@@ -5,8 +5,8 @@ import (
 	"github.com/pool-break-bit/roundgen/internal/model"
 )
 
-// minFirstPocketMs: first pocket must occur at least 1.8 s into the animation.
-const minFirstPocketMs = 1800
+// minFirstPocketMs: first pocket must occur at least 1.0 s into the animation.
+const minFirstPocketMs = 1000
 
 // maxFirstPocketMs: first pocket must occur within 4.0 s.
 const maxFirstPocketMs = 4000
@@ -22,20 +22,19 @@ func Check(r model.Round) bool {
 		return false
 	}
 
-	// Require an object ball to be pocketed (outcome 0 = cue only is too rare /
-	// visually boring to include in the dataset).
-	if r.FirstPocketedBallID <= 0 {
+	// FirstPocketedBallID == -1 means nothing pocketed at all; reject.
+	if r.FirstPocketedBallID < 0 {
 		return false
 	}
 
-	// First object-ball pocket must fall in the acceptable time window.
-	for _, pe := range r.PocketEvents {
-		if pe.BallID != 0 {
-			if pe.TMs < minFirstPocketMs || pe.TMs > maxFirstPocketMs {
-				return false
-			}
-			break
-		}
+	// FirstPocketedBallID == 0 → cue-ball-first round (outcome "zero").
+	// These are valid; the time window check below covers all first-pocket events.
+
+	// First pocket must fall in the acceptable time window (applies to both
+	// cue-first and object-ball-first rounds).
+	firstPocket := r.PocketEvents[0]
+	if firstPocket.TMs < minFirstPocketMs || firstPocket.TMs > maxFirstPocketMs {
+		return false
 	}
 
 	// Enough balls must have scattered meaningfully.

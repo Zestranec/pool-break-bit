@@ -24,6 +24,10 @@ export interface RoundData {
   /** Cue ball spawn position. */
   cueX: number;
   cueY: number;
+  /** Break-target metadata (stored for analytics; not used by ReplayPlayer). */
+  bpid: number;  // BreakPreset ID (0–6)
+  btx:  number;  // actual break-target X (preset + jitter)
+  bty:  number;  // actual break-target Y
   /** Position samples, one every ~33 ms (~2 physics frames at 60 Hz). */
   s: Sample[];
   /** Pocket events in chronological order. */
@@ -36,9 +40,11 @@ export interface RoundData {
 
 /** One line in public/data/index.json */
 export interface IndexEntry {
-  file: string;
-  firstBall: number; // -1 if no object ball pocketed
+  file:      string;
+  firstBall: number; // -1 if no object ball pocketed, 0 = cue only
   firstPock: number;
+  bpid:      number; // BreakPreset ID used for this round (0–6)
+  cueRegion: number; // cue spawn region: 0 = left, 1 = center, 2 = right
 }
 
 /** The parsed dataset index. */
