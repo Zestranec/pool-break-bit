@@ -37,13 +37,16 @@ export const FELT = {
 } as const;
 
 // ─── Pocket positions ────────────────────────────────────────────────────────
+// Portrait table — long axis is vertical.
+//   Corner pockets: 4 corners of the felt rectangle.
+//   Mid pockets: centered on the LEFT and RIGHT long rails (not short top/bottom rails).
 export const POCKETS = [
-  { id: 0, x: FELT.left,            y: FELT.top    }, // TL  ( 24, 24)
-  { id: 1, x: TABLE.width / 2,      y: FELT.top    }, // TM  (200, 24)
-  { id: 2, x: FELT.right,           y: FELT.top    }, // TR  (376, 24)
-  { id: 3, x: FELT.left,            y: FELT.bottom }, // BL  ( 24,476)
-  { id: 4, x: TABLE.width / 2,      y: FELT.bottom }, // BM  (200,476)
-  { id: 5, x: FELT.right,           y: FELT.bottom }, // BR  (376,476)
+  { id: 0, x: FELT.left,            y: FELT.top          }, // TL  ( 24, 24)
+  { id: 1, x: FELT.left,            y: TABLE.height / 2  }, // LM  ( 24,250) ← long-rail mid
+  { id: 2, x: FELT.right,           y: FELT.top          }, // TR  (376, 24)
+  { id: 3, x: FELT.left,            y: FELT.bottom       }, // BL  ( 24,476)
+  { id: 4, x: FELT.right,           y: TABLE.height / 2  }, // RM  (376,250) ← long-rail mid
+  { id: 5, x: FELT.right,           y: FELT.bottom       }, // BR  (376,476)
 ] as const;
 
 // ─── Rack positions: full 15-ball triangle ───────────────────────────────────
@@ -109,13 +112,23 @@ export const BALL_COUNT = 15;
 //   +89  4×4 single-ball grid (4 × 24 px + 3 × 3 px = 105 px → ends ~705)
 //   +198 action row: [−] [bet] [+] [BREAK]  (36 px → ends ~748)
 //   +234 bottom (236 px < 240 ✓)
+// ─── HUD layout ───────────────────────────────────────────────────────────────
+// Panel starts at TABLE.height + 10 = 510.  Available: 750 − 510 = 240 px.
+//
+//   510  separator
+//   513  BALANCE / WIN row                              (≈ 35 px)
+//   548  "GROUP BETS" label                            ( 10 px)
+//   558  [LOW] [ODD] [EVEN] [HIGH]   h=32             ( 32 px)
+//   590  "SINGLE BALL" label                           ( 10 px)
+//   600  4×4 ball grid  4×24 + 3×3                    (105 px → bottom 705)
+//   709  [−] [$] [+] [BREAK]         h=36             ( 36 px → bottom 745)
 export const HUD = {
-  topY:          510,   // TABLE.height 500 + 10 px gap
+  topY:          510,
   balanceY:      513,
-  outsideBetsY:  552,   // top of outside-bet buttons (height 32 px)
-  summaryY:      588,   // bet summary text
-  gridY:         605,   // top of 4×4 ball grid  (4×24 + 3×3 = 105 px → bottom 710)
-  actionRowY:    714,   // action row  (36 px → bottom 750 ✓)
+  outsideBetsY:  558,   // top of outside-bet buttons (h=32 → bottom 590)
+  summaryY:      590,   // "SINGLE BALL" label (used as section-label Y)
+  gridY:         602,   // top of 4×4 ball grid (4×24+3×3=105 → bottom 707)
+  actionRowY:    709,   // action row (h=36 → bottom 745 < 750 ✓)
 } as const;
 
 // ─── Animation timing (seconds unless noted) ────────────────────────────────

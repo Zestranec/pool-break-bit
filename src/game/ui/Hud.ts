@@ -1,12 +1,13 @@
 /**
- * Hud — mobile-first betting panel.
+ * Hud — premium mobile betting panel.
  *
- * Layout (Y from DESIGN_HEIGHT top):
- *   [balance row]                  balanceY
- *   [LOW] [ODD] [EVEN] [HIGH]     outsideBetsY  (36 px tall each)
- *   [summary: bet label × mult → $X]  summaryY
- *   [4×4 single-ball grid 0–15]   gridY         (tiles 30×88 px, 3 px gaps)
- *   [−] [bet amount] [+] [BREAK]  actionRowY    (42 px tall)
+ * Layout (from HUD.topY):
+ *   [BALANCE left  |  WIN right]       balanceY
+ *   [GROUP BETS header]
+ *   [LOW] [ODD] [EVEN] [HIGH]          outsideBetsY
+ *   [SINGLE BALL header]               summaryY
+ *   [4×4 ball grid, n=0..15]           gridY        (tiles 88×24 px)
+ *   [−] [stake] [+] [BREAK]            actionRowY
  */
 
 import { Container, Graphics, Text } from 'pixi.js';
@@ -21,15 +22,16 @@ import { gsap } from 'gsap';
 
 // ── Tile geometry ─────────────────────────────────────────────────────────────
 const TILE_COLS  = 4;
-const TILE_ROWS  = 4;           // rows 0–3
-const TILE_W     = 88;          // px
-const TILE_H     = 24;          // px  (compact for 240 px HUD budget)
-const TILE_GAP   = 3;           // px between tiles
+const TILE_W     = 88;
+const TILE_H     = 24;
+const TILE_GAP   = 3;
 const TILE_PAD_X = (DESIGN_WIDTH - TILE_COLS * TILE_W - (TILE_COLS - 1) * TILE_GAP) / 2;
 
-// Tiles represent display numbers 0–15:
-//   0 → cue ball ('cue' bet), displayed as "0" + "CUE"
-//   1–15 → ball-N bets
+// Ball icon inside each tile
+const ICON_R  = 7;    // circle radius
+const ICON_X  = 15;   // icon centre-x relative to tile
+const ICON_Y  = 12;   // icon centre-y relative to tile (= TILE_H / 2)
+const NUM_X   = 55;   // number text centre-x relative to tile
 
 function displayToBetKey(n: number): BetKey {
   return n === 0 ? 'cue' : (`ball-${n}` as BetKey);
@@ -37,45 +39,45 @@ function displayToBetKey(n: number): BetKey {
 
 // ── Outside bets ──────────────────────────────────────────────────────────────
 const OUTSIDE: Array<{ key: BetKey; label: string; sublabel: string }> = [
-  { key: 'low',  label: 'LOW',  sublabel: '1–8'  },
-  { key: 'odd',  label: 'ODD',  sublabel: ''      },
-  { key: 'even', label: 'EVEN', sublabel: ''      },
-  { key: 'high', label: 'HIGH', sublabel: '8–15' },
+  { key: 'low',  label: 'LOW',  sublabel: '1–8'     },
+  { key: 'odd',  label: 'ODD',  sublabel: '1,3,5…'  },
+  { key: 'even', label: 'EVEN', sublabel: '2,4,6…'  },
+  { key: 'high', label: 'HIGH', sublabel: '8–15'    },
 ];
-
-const OUTSIDE_BTN_H  = 32;
-const OUTSIDE_GAP    = 8;
-const OUTSIDE_BTN_W  = (DESIGN_WIDTH - 2 * 8 - (OUTSIDE.length - 1) * OUTSIDE_GAP) / OUTSIDE.length; // ≈ 90
+const OUTSIDE_BTN_H = 32;
+const OUTSIDE_GAP   = 6;
+const OUTSIDE_BTN_W = (DESIGN_WIDTH - 2 * 8 - (OUTSIDE.length - 1) * OUTSIDE_GAP) / OUTSIDE.length;
 
 // ── Action row ────────────────────────────────────────────────────────────────
-const ACT_H    = 36;            // action-row height
-const ACT_BTN  = 40;            // [-] / [+] button width
-const ACT_BET  = 80;            // bet display width
-const ACT_PAD  = 8;             // side padding
-// BREAK button x = ACT_PAD + ACT_BTN + ACT_PAD + ACT_BET + ACT_PAD + ACT_BTN + ACT_PAD = 8+40+8+82+8+40+8=194
-// BREAK width = DESIGN_WIDTH − 194 − ACT_PAD = 400 − 194 − 8 = 198
+const ACT_H   = 36;
+const ACT_BTN = 40;
+const ACT_BET = 80;
+const ACT_PAD = 8;
 
-// ── Color utilities ───────────────────────────────────────────────────────────
-const CUE_FILL    = 0xf5f0e0;
-const TILE_SEL_BG = 0x1a4820;   // selected tile dark-green bg tint
-const SEL_BORDER  = 0xffd700;   // gold selection ring
-const OUTSIDE_SEL = 0x1e6b3c;   // selected outside btn bg
+// ── Colours ───────────────────────────────────────────────────────────────────
+const SEL_BORDER     = 0xffd700;
+const SEL_TILE_BG    = 0x0a2c14;
+const SEL_OUTSIDE_BG = 0x1a3a22;
+const DARK_TILE_BG   = 0x1c1c1c;
+const DARK_BTN_BG    = 0x1a1a1a;
+const CUE_CIRCLE_COL = 0xf5f0e0;
+const SECTION_LABEL  = 0x555555;
 
 export class Hud extends Container {
-  private balanceText!:  Text;
-  private winText!:      Text;
-  private summaryText!:  Text;
-  private betDisplay!:   Text;
-  private breakBg!:      Graphics;
-  private breakLabel!:   Text;
+  private balanceText!: Text;
+  private winText!:     Text;
+  private betDisplay!:  Text;
+  private breakBg!:     Graphics;
+  private breakLabel!:  Text;
 
-  // tile and outside-bet graphics (key → bg Graphics for redraw)
-  private tileBgs:      Map<string, Graphics> = new Map();
-  private outsideBgs:   Map<string, Graphics> = new Map();
+  private tileBgs:    Map<string, Graphics> = new Map();
+  private outsideBgs: Map<string, Graphics> = new Map();
+  // Track label texts so we can recolour them on select
+  private outsideMainLabels: Map<string, Text> = new Map();
 
-  private onBetSelect:  (key: string) => void = () => {};
-  private onBreak:      () => void             = () => {};
-  private onBetChange:  (amount: number) => void = () => {};
+  private onBetSelect: (key: string) => void = () => {};
+  private onBreak:     () => void            = () => {};
+  private onBetChange: (amount: number) => void = () => {};
 
   constructor(
     private sm:    StateMachine,
@@ -85,8 +87,9 @@ export class Hud extends Container {
     super();
     this.buildBackground();
     this.buildBalanceRow();
+    this.buildSectionLabel('GROUP BETS', HUD.outsideBetsY - 14);
     this.buildOutsideBets();
-    this.buildSummary();
+    this.buildSectionLabel('SINGLE BALL', HUD.summaryY);
     this.buildGrid();
     this.buildActionRow();
   }
@@ -95,17 +98,29 @@ export class Hud extends Container {
 
   private buildBackground(): void {
     const bg = new Graphics();
-    bg.rect(0, HUD.topY, DESIGN_WIDTH, 300);
-    bg.fill({ color: 0x0d0d0d, alpha: 1 });
+    bg.rect(0, HUD.topY, DESIGN_WIDTH, DESIGN_WIDTH);   // generous overshoot
+    bg.fill({ color: 0x0d0d0d });
+    // separator line
     bg.rect(0, HUD.topY, DESIGN_WIDTH, 2);
     bg.fill({ color: 0x2a2a2a });
     this.addChild(bg);
   }
 
+  private buildSectionLabel(text: string, y: number): void {
+    const lbl = new Text({
+      text,
+      style: { fontSize: 9, fill: SECTION_LABEL, fontFamily: 'Arial', letterSpacing: 2 },
+    });
+    lbl.anchor.set(0.5, 0);
+    lbl.x = DESIGN_WIDTH / 2;
+    lbl.y = y;
+    this.addChild(lbl);
+  }
+
   private buildBalanceRow(): void {
     const balLabel = new Text({
       text: 'BALANCE',
-      style: { fontSize: 10, fill: 0x777777, fontFamily: 'Arial', letterSpacing: 2 },
+      style: { fontSize: 9, fill: 0x666666, fontFamily: 'Arial', letterSpacing: 2 },
     });
     balLabel.x = 14;
     balLabel.y = HUD.balanceY;
@@ -113,15 +128,15 @@ export class Hud extends Container {
 
     this.balanceText = new Text({
       text: '$1,000',
-      style: { fontSize: 18, fill: 0xf5f0e0, fontFamily: 'Arial', fontWeight: 'bold' },
+      style: { fontSize: 17, fill: 0xf5f0e0, fontFamily: 'Arial', fontWeight: 'bold' },
     });
     this.balanceText.x = 14;
-    this.balanceText.y = HUD.balanceY + 13;
+    this.balanceText.y = HUD.balanceY + 12;
     this.addChild(this.balanceText);
 
     const winLabel = new Text({
       text: 'WIN',
-      style: { fontSize: 10, fill: 0x777777, fontFamily: 'Arial', letterSpacing: 2 },
+      style: { fontSize: 9, fill: 0x666666, fontFamily: 'Arial', letterSpacing: 2 },
     });
     winLabel.anchor.x = 1;
     winLabel.x = DESIGN_WIDTH - 14;
@@ -130,18 +145,18 @@ export class Hud extends Container {
 
     this.winText = new Text({
       text: '',
-      style: { fontSize: 18, fill: 0xffd700, fontFamily: 'Arial', fontWeight: 'bold' },
+      style: { fontSize: 17, fill: 0xffd700, fontFamily: 'Arial', fontWeight: 'bold' },
     });
     this.winText.anchor.x = 1;
     this.winText.x = DESIGN_WIDTH - 14;
-    this.winText.y = HUD.balanceY + 13;
+    this.winText.y = HUD.balanceY + 12;
     this.addChild(this.winText);
   }
 
   private buildOutsideBets(): void {
     OUTSIDE.forEach(({ key, label, sublabel }, i) => {
-      const x  = 8 + i * (OUTSIDE_BTN_W + OUTSIDE_GAP);
-      const y  = HUD.outsideBetsY;
+      const x = 8 + i * (OUTSIDE_BTN_W + OUTSIDE_GAP);
+      const y = HUD.outsideBetsY;
 
       const bg = new Graphics();
       this.drawOutsideBg(bg, false);
@@ -155,54 +170,57 @@ export class Hud extends Container {
 
       const mainTxt = new Text({
         text: label,
-        style: { fontSize: 13, fontWeight: 'bold', fill: 0xdddddd, fontFamily: 'Arial', letterSpacing: 1 },
+        style: { fontSize: 13, fontWeight: 'bold', fill: 0xbbbbbb, fontFamily: 'Arial' },
       });
-      mainTxt.anchor.set(0.5, sublabel ? 0.6 : 0.5);
+      mainTxt.anchor.set(0.5);
       mainTxt.x = x + OUTSIDE_BTN_W / 2;
-      mainTxt.y = y + OUTSIDE_BTN_H / 2 - (sublabel ? 2 : 0);
+      mainTxt.y = y + OUTSIDE_BTN_H / 2 - 6;
       this.addChild(mainTxt);
+      this.outsideMainLabels.set(key, mainTxt);
 
-      if (sublabel) {
-        const subTxt = new Text({
-          text: sublabel,
-          style: { fontSize: 9, fill: 0x888888, fontFamily: 'Arial' },
-        });
-        subTxt.anchor.set(0.5, 0);
-        subTxt.x = x + OUTSIDE_BTN_W / 2;
-        subTxt.y = y + OUTSIDE_BTN_H / 2 + 4;
-        this.addChild(subTxt);
-      }
+      const subTxt = new Text({
+        text: sublabel,
+        style: { fontSize: 8, fill: 0x666666, fontFamily: 'Arial' },
+      });
+      subTxt.anchor.set(0.5, 0);
+      subTxt.x = x + OUTSIDE_BTN_W / 2;
+      subTxt.y = y + OUTSIDE_BTN_H / 2 + 2;
+      this.addChild(subTxt);
     });
   }
 
   private drawOutsideBg(g: Graphics, selected: boolean): void {
     g.clear();
-    g.roundRect(0, 0, OUTSIDE_BTN_W, OUTSIDE_BTN_H, 6);
-    g.fill(selected ? OUTSIDE_SEL : 0x1c1c1c);
-    g.roundRect(0, 0, OUTSIDE_BTN_W, OUTSIDE_BTN_H, 6);
-    g.stroke({ color: selected ? SEL_BORDER : 0x383838, width: selected ? 2 : 1 });
-  }
-
-  private buildSummary(): void {
-    this.summaryText = new Text({
-      text: 'Select a bet to play',
-      style: { fontSize: 11, fill: 0x555555, fontFamily: 'Arial', fontStyle: 'italic' },
-    });
-    this.summaryText.anchor.set(0.5, 0);
-    this.summaryText.x = DESIGN_WIDTH / 2;
-    this.summaryText.y = HUD.summaryY;
-    this.addChild(this.summaryText);
+    if (selected) {
+      // Gold glow halo
+      g.roundRect(-2, -2, OUTSIDE_BTN_W + 4, OUTSIDE_BTN_H + 4, 8);
+      g.fill({ color: SEL_BORDER, alpha: 0.18 });
+      // Dark green interior
+      g.roundRect(0, 0, OUTSIDE_BTN_W, OUTSIDE_BTN_H, 6);
+      g.fill(SEL_OUTSIDE_BG);
+      // Inner highlight strip
+      g.roundRect(1, 1, OUTSIDE_BTN_W - 2, 10, 5);
+      g.fill({ color: 0xffffff, alpha: 0.04 });
+      // Gold border
+      g.roundRect(0, 0, OUTSIDE_BTN_W, OUTSIDE_BTN_H, 6);
+      g.stroke({ color: SEL_BORDER, width: 1.5 });
+    } else {
+      g.roundRect(0, 0, OUTSIDE_BTN_W, OUTSIDE_BTN_H, 6);
+      g.fill(DARK_TILE_BG);
+      g.roundRect(1, 1, OUTSIDE_BTN_W - 2, OUTSIDE_BTN_H / 2, 5);
+      g.fill({ color: 0xffffff, alpha: 0.03 });
+      g.roundRect(0, 0, OUTSIDE_BTN_W, OUTSIDE_BTN_H, 6);
+      g.stroke({ color: 0x333333, width: 1 });
+    }
   }
 
   private buildGrid(): void {
-    // 4×4 grid: display numbers 0–15
-    // Row 0: 0,1,2,3  — Row 1: 4,5,6,7  — Row 2: 8,9,10,11  — Row 3: 12,13,14,15
     for (let n = 0; n <= 15; n++) {
-      const col  = n % TILE_COLS;
-      const row  = Math.floor(n / TILE_COLS);
-      const tx   = TILE_PAD_X + col * (TILE_W + TILE_GAP);
-      const ty   = HUD.gridY  + row * (TILE_H + TILE_GAP);
-      const key  = displayToBetKey(n);
+      const col = n % TILE_COLS;
+      const row = Math.floor(n / TILE_COLS);
+      const tx  = TILE_PAD_X + col * (TILE_W + TILE_GAP);
+      const ty  = HUD.gridY  + row * (TILE_H + TILE_GAP);
+      const key = displayToBetKey(n);
 
       const bg = new Graphics();
       this.drawTileBg(bg, n, false);
@@ -214,89 +232,127 @@ export class Hud extends Container {
       this.addChild(bg);
       this.tileBgs.set(key, bg);
 
-      // Number label
-      const isStripe = n >= 9;
-      const ballDef  = n > 0 ? getBallDef(n) : null;
-      const textColor = n === 0 ? 0x444444
-                      : n === 8 ? 0xffffff
-                      : isStripe ? (ballDef?.color ?? 0x333333)
-                      : 0xffffff;
-
-      const numTxt = new Text({
-        text: String(n),
-        style: {
-          fontSize: n <= 9 ? 13 : 11,
-          fontWeight: 'bold',
-          fill: textColor,
-          fontFamily: 'Arial',
-        },
-      });
-      numTxt.anchor.set(n === 0 ? 0.5 : 0.5, n === 0 ? 0.35 : 0.5);
-      numTxt.x = tx + TILE_W / 2;
-      numTxt.y = ty + TILE_H / 2;
-      this.addChild(numTxt);
-
-      // "CUE" sublabel on tile 0
       if (n === 0) {
+        // CUE tile: centred label pair
+        const numTxt = new Text({
+          text: '0',
+          style: { fontSize: 10, fontWeight: 'bold', fill: 0xbbbbbb, fontFamily: 'Arial' },
+        });
+        numTxt.anchor.set(0.5);
+        numTxt.x = tx + NUM_X;
+        numTxt.y = ty + ICON_Y - 4;
+        this.addChild(numTxt);
+
         const cueTxt = new Text({
           text: 'CUE',
-          style: { fontSize: 7, fill: 0x888888, fontFamily: 'Arial', letterSpacing: 1 },
+          style: { fontSize: 7, fill: 0x777777, fontFamily: 'Arial', letterSpacing: 1 },
         });
         cueTxt.anchor.set(0.5, 0);
-        cueTxt.x = tx + TILE_W / 2;
-        cueTxt.y = ty + TILE_H / 2 + 2;
+        cueTxt.x = tx + NUM_X;
+        cueTxt.y = ty + ICON_Y + 3;
         this.addChild(cueTxt);
+      } else {
+        const isStripe   = n >= 9;
+        const textColor  = n === 8 ? 0xffffff
+                         : isStripe ? 0x222222
+                         : 0xffffff;
+        const numTxt = new Text({
+          text: String(n),
+          style: {
+            fontSize: n >= 10 ? 11 : 13,
+            fontWeight: 'bold',
+            fill: textColor,
+            fontFamily: 'Arial',
+          },
+        });
+        numTxt.anchor.set(0.5);
+        numTxt.x = tx + NUM_X;
+        numTxt.y = ty + ICON_Y;
+        this.addChild(numTxt);
       }
     }
   }
 
-  private drawTileBg(g: Graphics, displayN: number, selected: boolean): void {
+  private drawTileBg(g: Graphics, n: number, selected: boolean): void {
     g.clear();
-    const isStripe = displayN >= 9;
-    const ballDef  = displayN > 0 ? getBallDef(displayN) : null;
 
-    if (displayN === 0) {
-      // Cue ball tile — ivory
-      g.roundRect(0, 0, TILE_W, TILE_H, 4);
-      g.fill(selected ? 0xe8e0cc : CUE_FILL);
-    } else if (isStripe) {
-      // Stripe tile — white bg with color band
-      g.roundRect(0, 0, TILE_W, TILE_H, 4);
-      g.fill(selected ? 0xf0f0e8 : 0xfafafa);
-      // Color stripe across center third
-      const bandY = TILE_H * 0.28;
-      const bandH = TILE_H * 0.44;
-      g.rect(0, bandY, TILE_W, bandH);
-      g.fill(ballDef?.color ?? 0x888888);
-      // Re-clip corners (draw transparent overlay is complex; rely on roundRect + overdraw)
-    } else if (displayN === 8) {
-      // 8-ball
-      g.roundRect(0, 0, TILE_W, TILE_H, 4);
-      g.fill(selected ? 0x333333 : 0x111111);
-    } else {
-      // Solid ball (1–7)
-      const baseColor = ballDef?.color ?? 0x888888;
-      const selColor  = lighten(baseColor, selected ? 0.25 : 0);
-      g.roundRect(0, 0, TILE_W, TILE_H, 4);
-      g.fill(selColor);
-    }
-
-    // Selection border
+    // ── Background card ───────────────────────────────────────────────────────
     if (selected) {
+      // Outer glow
+      g.roundRect(-2, -2, TILE_W + 4, TILE_H + 4, 6);
+      g.fill({ color: SEL_BORDER, alpha: 0.22 });
+      // Dark green bg
+      g.roundRect(0, 0, TILE_W, TILE_H, 4);
+      g.fill(SEL_TILE_BG);
+      // Inner shine
+      g.roundRect(1, 1, TILE_W - 2, 9, 3);
+      g.fill({ color: 0xffffff, alpha: 0.05 });
+      // Gold border
       g.roundRect(0, 0, TILE_W, TILE_H, 4);
       g.stroke({ color: SEL_BORDER, width: 2 });
+    } else {
+      g.roundRect(0, 0, TILE_W, TILE_H, 4);
+      g.fill(DARK_TILE_BG);
+      // Subtle top shine
+      g.roundRect(1, 1, TILE_W - 2, 9, 3);
+      g.fill({ color: 0xffffff, alpha: 0.03 });
+      g.roundRect(0, 0, TILE_W, TILE_H, 4);
+      g.stroke({ color: 0x2e2e2e, width: 1 });
+    }
+
+    // ── Ball icon ─────────────────────────────────────────────────────────────
+    const ix = ICON_X;
+    const iy = ICON_Y;
+    const ir = ICON_R;
+
+    if (n === 0) {
+      // Cue ball — ivory circle with subtle ring
+      g.circle(ix, iy, ir);
+      g.fill(CUE_CIRCLE_COL);
+      g.circle(ix, iy, ir);
+      g.stroke({ color: 0xaaaaaa, width: 0.8 });
+      // Tiny specular
+      g.circle(ix - 2, iy - 2, 2);
+      g.fill({ color: 0xffffff, alpha: 0.5 });
+    } else if (n === 8) {
+      // 8-ball — black with white dot
+      g.circle(ix, iy, ir);
+      g.fill(0x111111);
+      g.circle(ix - 2, iy - 1, 2.5);
+      g.fill(0xffffff);
+    } else if (n >= 9) {
+      // Stripe — white base + ball-colour caps for stripe effect
+      const ballDef = getBallDef(n);
+      const col     = ballDef?.color ?? 0x888888;
+      const capR    = Math.round(ir * 0.55);
+      g.circle(ix, iy, ir);
+      g.fill(0xffffff);
+      g.circle(ix, iy - ir + capR, capR);
+      g.fill(col);
+      g.circle(ix, iy + ir - capR, capR);
+      g.fill(col);
+      // Thin outline
+      g.circle(ix, iy, ir);
+      g.stroke({ color: col, width: 1 });
+    } else {
+      // Solid 1–7
+      const ballDef = getBallDef(n);
+      g.circle(ix, iy, ir);
+      g.fill(ballDef?.color ?? 0x888888);
+      // Specular
+      g.circle(ix - 2, iy - 2, 2.5);
+      g.fill({ color: 0xffffff, alpha: 0.35 });
     }
   }
 
   private buildActionRow(): void {
     const y  = HUD.actionRowY;
-    const bY = y;   // buttons fill the full ACT_H row height
 
     // [−] button
     const minusBg = new Graphics();
     this.drawAdjBtn(minusBg);
     minusBg.x = ACT_PAD;
-    minusBg.y = bY;
+    minusBg.y = y;
     minusBg.eventMode = 'static';
     minusBg.cursor    = 'pointer';
     minusBg.on('pointerdown', () => this.shiftBet(-1));
@@ -304,29 +360,36 @@ export class Hud extends Container {
 
     const minusTxt = new Text({
       text: '−',
-      style: { fontSize: 20, fill: 0xcccccc, fontFamily: 'Arial', fontWeight: 'bold' },
+      style: { fontSize: 20, fill: 0xaaaaaa, fontFamily: 'Arial', fontWeight: 'bold' },
     });
     minusTxt.anchor.set(0.5);
     minusTxt.x = ACT_PAD + ACT_BTN / 2;
-    minusTxt.y = bY + ACT_H / 2;
+    minusTxt.y = y + ACT_H / 2;
     this.addChild(minusTxt);
 
-    // Bet display
+    // Bet display (plain text between [-] and [+])
+    const betBg = new Graphics();
+    betBg.roundRect(ACT_PAD + ACT_BTN + 4, y, ACT_BET, ACT_H, 4);
+    betBg.fill(0x141414);
+    betBg.roundRect(ACT_PAD + ACT_BTN + 4, y, ACT_BET, ACT_H, 4);
+    betBg.stroke({ color: 0x2a2a2a, width: 1 });
+    this.addChild(betBg);
+
     this.betDisplay = new Text({
       text: `$${this.bet.currentBet}`,
       style: { fontSize: 15, fontWeight: 'bold', fill: 0xf5f0e0, fontFamily: 'Arial' },
     });
     this.betDisplay.anchor.set(0.5);
-    this.betDisplay.x = ACT_PAD + ACT_BTN + ACT_PAD + ACT_BET / 2;
-    this.betDisplay.y = bY + ACT_H / 2;
+    this.betDisplay.x = ACT_PAD + ACT_BTN + 4 + ACT_BET / 2;
+    this.betDisplay.y = y + ACT_H / 2;
     this.addChild(this.betDisplay);
 
     // [+] button
     const plusBg = new Graphics();
     this.drawAdjBtn(plusBg);
-    const plusX = ACT_PAD + ACT_BTN + ACT_PAD + ACT_BET + ACT_PAD;
+    const plusX = ACT_PAD + ACT_BTN + 4 + ACT_BET + 4;
     plusBg.x = plusX;
-    plusBg.y = bY;
+    plusBg.y = y;
     plusBg.eventMode = 'static';
     plusBg.cursor    = 'pointer';
     plusBg.on('pointerdown', () => this.shiftBet(+1));
@@ -334,11 +397,11 @@ export class Hud extends Container {
 
     const plusTxt = new Text({
       text: '+',
-      style: { fontSize: 18, fill: 0xcccccc, fontFamily: 'Arial', fontWeight: 'bold' },
+      style: { fontSize: 18, fill: 0xaaaaaa, fontFamily: 'Arial', fontWeight: 'bold' },
     });
     plusTxt.anchor.set(0.5);
     plusTxt.x = plusX + ACT_BTN / 2;
-    plusTxt.y = bY + ACT_H / 2;
+    plusTxt.y = y + ACT_H / 2;
     this.addChild(plusTxt);
 
     // BREAK button
@@ -346,7 +409,7 @@ export class Hud extends Container {
     const breakW = DESIGN_WIDTH - breakX - ACT_PAD;
     const breakCont = new Container();
     breakCont.x = breakX;
-    breakCont.y = bY;
+    breakCont.y = y;
 
     this.breakBg = new Graphics();
     this.drawBreakBtn(false, breakW);
@@ -355,7 +418,7 @@ export class Hud extends Container {
     this.breakLabel = new Text({
       text: 'BREAK',
       style: {
-        fontSize: 17,
+        fontSize: 16,
         fontWeight: 'bold',
         fill: 0xffffff,
         fontFamily: 'Arial',
@@ -376,51 +439,59 @@ export class Hud extends Container {
     });
     this.addChild(breakCont);
 
-    // Store width for redraw
     (this.breakBg as any)._breakW = breakW;
   }
 
   private drawAdjBtn(g: Graphics): void {
     g.clear();
     g.roundRect(0, 0, ACT_BTN, ACT_H, 6);
-    g.fill(0x1c1c1c);
-    g.stroke({ color: 0x383838, width: 1 });
+    g.fill(DARK_TILE_BG);
+    g.roundRect(0, 0, ACT_BTN, ACT_H, 6);
+    g.stroke({ color: 0x333333, width: 1 });
   }
 
   private drawBreakBtn(active: boolean, w: number): void {
     this.breakBg.clear();
     if (active) {
+      // Outer glow
+      this.breakBg.roundRect(-3, -3, w + 6, ACT_H + 6, 10);
+      this.breakBg.fill({ color: 0x33ff88, alpha: 0.12 });
+      // Base
       this.breakBg.roundRect(0, 0, w, ACT_H, 8);
       this.breakBg.fill(0x1a6b3c);
-      this.breakBg.roundRect(2, 2, w - 4, ACT_H - 4, 7);
+      // Inner lighter layer
+      this.breakBg.roundRect(1, 1, w - 2, ACT_H - 2, 7);
       this.breakBg.fill(0x27a85e);
-      this.breakBg.roundRect(4, 4, w - 8, ACT_H * 0.4, 5);
-      this.breakBg.fill({ color: 0xffffff, alpha: 0.10 });
+      // Top shine
+      this.breakBg.roundRect(3, 3, w - 6, Math.round(ACT_H * 0.38), 5);
+      this.breakBg.fill({ color: 0xffffff, alpha: 0.12 });
     } else {
       this.breakBg.roundRect(0, 0, w, ACT_H, 8);
-      this.breakBg.fill(0x1a1a1a);
-      this.breakBg.roundRect(2, 2, w - 4, ACT_H - 4, 7);
-      this.breakBg.fill(0x262626);
+      this.breakBg.fill(DARK_BTN_BG);
+      this.breakBg.roundRect(1, 1, w - 2, ACT_H - 2, 7);
+      this.breakBg.fill(0x242424);
     }
   }
+
+  // ─── Interaction ─────────────────────────────────────────────────────────────
 
   private handleBetClick(key: BetKey): void {
     if (this.input.isLocked()) return;
     if (this.sm.current !== GamePhase.BETTING) return;
-    this.selectBet(key);
+    // IMPORTANT: update state BEFORE selectBet, so refreshBreakButton sees the new key.
     this.onBetSelect(key);
+    this.selectBet(key);
   }
 
   private shiftBet(delta: number): void {
     if (this.input.isLocked()) return;
     if (!this.bet.canChangeBet()) return;
-    const idx     = BET_OPTIONS.indexOf(this.bet.currentBet as any);
-    const newIdx  = Math.max(0, Math.min(BET_OPTIONS.length - 1, idx + delta));
-    const amount  = BET_OPTIONS[newIdx];
+    const idx    = BET_OPTIONS.indexOf(this.bet.currentBet as any);
+    const newIdx = Math.max(0, Math.min(BET_OPTIONS.length - 1, idx + delta));
+    const amount = BET_OPTIONS[newIdx];
     if (amount === this.bet.currentBet) return;
     this.onBetChange(amount);
     this.betDisplay.text = `$${amount}`;
-    this.updateSummary();
   }
 
   // ─── Public API ───────────────────────────────────────────────────────────────
@@ -429,46 +500,44 @@ export class Hud extends Container {
   setOnBreak(fn: () => void): void                 { this.onBreak = fn; }
   setOnBetChange(fn: (a: number) => void): void    { this.onBetChange = fn; }
 
-  /** Highlight the given bet key and clear all others. */
   selectBet(key: string): void {
-    // Redraw all outside buttons
     for (const { key: k } of OUTSIDE) {
-      const bg = this.outsideBgs.get(k);
-      if (bg) this.drawOutsideBg(bg, k === key);
+      const bg  = this.outsideBgs.get(k);
+      const lbl = this.outsideMainLabels.get(k);
+      if (bg)  this.drawOutsideBg(bg, k === key);
+      if (lbl) lbl.style.fill = k === key ? SEL_BORDER : 0xbbbbbb;
     }
-    // Redraw all tiles (0–15)
     for (let n = 0; n <= 15; n++) {
       const k  = displayToBetKey(n);
       const bg = this.tileBgs.get(k);
       if (bg) this.drawTileBg(bg, n, k === key);
     }
-    this.updateSummary(key);
     this.refreshBreakButton();
   }
 
   deselectAll(): void {
     for (const { key } of OUTSIDE) {
-      const bg = this.outsideBgs.get(key);
-      if (bg) this.drawOutsideBg(bg, false);
+      const bg  = this.outsideBgs.get(key);
+      const lbl = this.outsideMainLabels.get(key);
+      if (bg)  this.drawOutsideBg(bg, false);
+      if (lbl) lbl.style.fill = 0xbbbbbb;
     }
     for (let n = 0; n <= 15; n++) {
       const bg = this.tileBgs.get(displayToBetKey(n));
       if (bg) this.drawTileBg(bg, n, false);
     }
-    this.updateSummary();
     this.refreshBreakButton();
   }
 
   refreshBreakButton(): void {
     const active = this.sm.canStartRound();
-    const w      = (this.breakBg as any)._breakW ?? 198;
+    const w      = (this.breakBg as any)._breakW ?? 180;
     this.drawBreakBtn(active, w);
   }
 
   updateBalance(): void {
     this.balanceText.text = `$${this.bet.balance.toLocaleString()}`;
     this.betDisplay.text  = `$${this.bet.currentBet}`;
-    this.updateSummary();
   }
 
   showWin(amount: number): void {
@@ -482,13 +551,8 @@ export class Hud extends Container {
 
   setLocked(locked: boolean): void {
     const alpha = locked ? 0.4 : 1;
-    this.tileBgs.forEach(bg  => { bg.alpha  = alpha; });
+    this.tileBgs.forEach(bg    => { bg.alpha = alpha; });
     this.outsideBgs.forEach(bg => { bg.alpha = alpha; });
-  }
-
-  /** @deprecated kept for compatibility — bet cycling via action row now */
-  updateBetHighlight(_current: number): void {
-    this.betDisplay.text = `$${this.bet.currentBet}`;
   }
 
   resetForNewRound(): void {
@@ -499,33 +563,8 @@ export class Hud extends Container {
     this.refreshBreakButton();
   }
 
-  // ─── Private helpers ─────────────────────────────────────────────────────────
-
-  private updateSummary(key?: string): void {
-    if (!key) {
-      this.summaryText.style.fill = 0x555555;
-      this.summaryText.style.fontStyle = 'italic';
-      this.summaryText.text = 'Select a bet to play';
-      return;
-    }
-    try {
-      const def     = getBetDef(key as BetKey);
-      const mult    = def.payoutMultiplier.toFixed(2);
-      const returns = Math.floor(this.bet.currentBet * def.payoutMultiplier);
-      this.summaryText.style.fill = 0xbbbbbb;
-      this.summaryText.style.fontStyle = 'normal';
-      this.summaryText.text = `${def.label}  ×${mult}  →  $${returns}`;
-    } catch {
-      // unknown key; ignore
-    }
+  /** @deprecated kept for compatibility */
+  updateBetHighlight(_current: number): void {
+    this.betDisplay.text = `$${this.bet.currentBet}`;
   }
-}
-
-// ── Utility: lighten a hex color by a fraction ────────────────────────────────
-function lighten(color: number, amount: number): number {
-  if (amount === 0) return color;
-  const r = Math.min(255, ((color >> 16) & 0xff) + Math.round(255 * amount));
-  const g = Math.min(255, ((color >> 8)  & 0xff) + Math.round(255 * amount));
-  const b = Math.min(255, ( color        & 0xff)  + Math.round(255 * amount));
-  return (r << 16) | (g << 8) | b;
 }

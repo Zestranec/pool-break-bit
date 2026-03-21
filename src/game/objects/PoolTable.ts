@@ -38,22 +38,24 @@ export class PoolTable extends Container {
     this.addChild(grain);
 
     // ── Cushion inner edges ──────────────────────────────────────────────────
+    // Portrait orientation: mid pockets are on left & right LONG rails.
     const cushion = new Graphics();
-    // Top
-    cushion.moveTo(FELT.left + POCKET_RADIUS + 2, FELT.top);
-    cushion.lineTo(TABLE.width / 2 - POCKET_RADIUS, FELT.top);
-    cushion.moveTo(TABLE.width / 2 + POCKET_RADIUS, FELT.top);
+    const midY = TABLE.height / 2;
+    // Top rail — corner pockets only, no mid gap
+    cushion.moveTo(FELT.left  + POCKET_RADIUS + 2, FELT.top);
     cushion.lineTo(FELT.right - POCKET_RADIUS - 2, FELT.top);
-    // Bottom
-    cushion.moveTo(FELT.left + POCKET_RADIUS + 2, FELT.bottom);
-    cushion.lineTo(TABLE.width / 2 - POCKET_RADIUS, FELT.bottom);
-    cushion.moveTo(TABLE.width / 2 + POCKET_RADIUS, FELT.bottom);
+    // Bottom rail — corner pockets only
+    cushion.moveTo(FELT.left  + POCKET_RADIUS + 2, FELT.bottom);
     cushion.lineTo(FELT.right - POCKET_RADIUS - 2, FELT.bottom);
-    // Left
-    cushion.moveTo(FELT.left, FELT.top + POCKET_RADIUS + 2);
+    // Left rail — gap at centre for left-mid pocket
+    cushion.moveTo(FELT.left, FELT.top  + POCKET_RADIUS + 2);
+    cushion.lineTo(FELT.left, midY - POCKET_RADIUS);
+    cushion.moveTo(FELT.left, midY + POCKET_RADIUS);
     cushion.lineTo(FELT.left, FELT.bottom - POCKET_RADIUS - 2);
-    // Right
-    cushion.moveTo(FELT.right, FELT.top + POCKET_RADIUS + 2);
+    // Right rail — gap at centre for right-mid pocket
+    cushion.moveTo(FELT.right, FELT.top  + POCKET_RADIUS + 2);
+    cushion.lineTo(FELT.right, midY - POCKET_RADIUS);
+    cushion.moveTo(FELT.right, midY + POCKET_RADIUS);
     cushion.lineTo(FELT.right, FELT.bottom - POCKET_RADIUS - 2);
     cushion.stroke({ color: TABLE.cushionColor, width: 3 });
     this.addChild(cushion);
