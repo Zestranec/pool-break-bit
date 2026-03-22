@@ -30,7 +30,11 @@
       }
       canvas {
         display: block;
-        touch-action: none;
+        /* pan-y: vertical swipes scroll the outer page;
+           taps still reach PixiJS normally.
+           Note: Game.ts also sets this as an inline style to override
+           PixiJS's own touch-action:none that it injects after init. */
+        touch-action: pan-y;
       }
     </style>
   </head>

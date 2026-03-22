@@ -39,6 +39,12 @@ export class Game {
     });
     container.appendChild(this.app.canvas);
 
+    // PixiJS EventSystem sets touch-action:none on the canvas as an inline
+    // style after init, which would override our CSS rule and block native
+    // vertical scrolling on mobile.  Restore pan-y so the browser can still
+    // scroll the page while taps continue to reach PixiJS normally.
+    (this.app.canvas as HTMLCanvasElement).style.touchAction = 'pan-y';
+
     // Responsive scale
     this.fitToWindow();
     window.addEventListener('resize', () => this.fitToWindow());
